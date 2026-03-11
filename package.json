@@ -1,0 +1,29 @@
+{
+  "name": "doc-forensics",
+  "version": "1.0.0",
+  "description": "Analizador de autenticidad de documentos — detecta IA y copia-pega",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^4.9.155",
+    "jszip": "^3.10.1",
+    "fast-xml-parser": "^4.5.0",
+    "mammoth": "^1.8.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  }
+}

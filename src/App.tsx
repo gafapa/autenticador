@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { FileDropzone } from './components/FileDropzone'
 import { ScoreGauge } from './components/ScoreGauge'
 import { MetadataPanel } from './components/MetadataPanel'
@@ -10,6 +10,56 @@ import type { AnalysisResult, FileType } from './types/analysis'
 import { useTranslation, useLocale, type Locale } from './i18n'
 
 const REPO_URL = 'https://github.com/gafapa/autenticador'
+const ANALYSIS_HISTORY_KEY = 'docforensics-analysis-history'
+
+function getAnalysisId(result: AnalysisResult): string {
+  return `${result.analyzedAt.toISOString()}::${result.fileName}::${result.fileSize}`
+}
+
+function reviveAnalysisResult(stored: AnalysisResult): AnalysisResult {
+  return {
+    ...stored,
+    analyzedAt: new Date(stored.analyzedAt),
+    metadata: {
+      ...stored.metadata,
+      createdAt: stored.metadata.createdAt ? new Date(stored.metadata.createdAt) : undefined,
+      modifiedAt: stored.metadata.modifiedAt ? new Date(stored.metadata.modifiedAt) : undefined,
+      lastPrintedAt: stored.metadata.lastPrintedAt
+        ? new Date(stored.metadata.lastPrintedAt)
+        : undefined,
+    },
+  }
+}
+
+function loadAnalysisHistory(): AnalysisResult[] {
+  try {
+    const raw = localStorage.getItem(ANALYSIS_HISTORY_KEY)
+    if (!raw) return []
+
+    const stored = JSON.parse(raw)
+    if (!Array.isArray(stored)) return []
+
+    return stored.map((item) => reviveAnalysisResult(item as AnalysisResult))
+  } catch {
+    return []
+  }
+}
+
+function persistAnalysisHistory(history: AnalysisResult[]): AnalysisResult[] {
+  let nextHistory = [...history]
+
+  while (nextHistory.length > 0) {
+    try {
+      localStorage.setItem(ANALYSIS_HISTORY_KEY, JSON.stringify(nextHistory))
+      return nextHistory
+    } catch {
+      nextHistory = nextHistory.slice(0, -1)
+    }
+  }
+
+  localStorage.removeItem(ANALYSIS_HISTORY_KEY)
+  return []
+}
 
 function detectFileType(file: File): FileType {
   const ext = file.name.split('.').pop()?.toLowerCase()
@@ -70,6 +120,16 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function formatAnalysisDate(date: Date): string {
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 function FileTypeBadge({ type }: { type: FileType }) {
   const colors: Record<FileType, string> = {
     pdf: 'bg-red-100 text-red-700',
@@ -112,10 +172,27 @@ function LanguageSwitcher() {
 
 export default function App() {
   const t = useTranslation()
-  const [result, setResult] = useState<AnalysisResult | null>(null)
+  const [history, setHistory] = useState<AnalysisResult[]>(loadAnalysisHistory)
+  const [result, setResult] = useState<AnalysisResult | null>(() => loadAnalysisHistory()[0] ?? null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showText, setShowText] = useState(false)
+
+  useEffect(() => {
+    const persistedHistory = persistAnalysisHistory(history)
+
+    const sameLength = persistedHistory.length === history.length
+    const sameItems =
+      sameLength &&
+      persistedHistory.every((item, index) => getAnalysisId(item) === getAnalysisId(history[index]))
+
+    if (!sameItems) {
+      setHistory(persistedHistory)
+      if (result && !persistedHistory.some((item) => getAnalysisId(item) === getAnalysisId(result))) {
+        setResult(persistedHistory[0] ?? null)
+      }
+    }
+  }, [history, result])
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -126,6 +203,7 @@ export default function App() {
       try {
         const r = await analyzeFile(file, t.unsupportedFileType)
         setResult(r)
+        setHistory((prev) => [r, ...prev])
       } catch (e) {
         setError(e instanceof Error ? e.message : t.errorAnalyzing)
       } finally {
@@ -146,6 +224,20 @@ export default function App() {
     a.click()
     URL.revokeObjectURL(url)
   }, [result])
+
+  const handleSelectHistory = useCallback((analysis: AnalysisResult) => {
+    setResult(analysis)
+    setError(null)
+    setShowText(false)
+  }, [])
+
+  const handleClearHistory = useCallback(() => {
+    localStorage.removeItem(ANALYSIS_HISTORY_KEY)
+    setHistory([])
+    setResult(null)
+    setError(null)
+    setShowText(false)
+  }, [])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
@@ -178,6 +270,62 @@ export default function App() {
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
         {/* Upload */}
         <FileDropzone onFile={handleFile} loading={loading} />
+
+        {history.length > 0 && (
+          <section className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+            <div className="p-4 border-b border-gray-100 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="font-semibold text-gray-700">{t.history.panelTitle}</h2>
+                <p className="text-xs text-gray-400 mt-1">{t.history.storedLocally}</p>
+              </div>
+              <button
+                onClick={handleClearHistory}
+                className="text-sm px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
+              >
+                {t.history.clear}
+              </button>
+            </div>
+            <div className="p-3 space-y-2">
+              {history.map((analysis, index) => {
+                const isSelected = result ? getAnalysisId(result) === getAnalysisId(analysis) : false
+
+                return (
+                  <button
+                    key={getAnalysisId(analysis)}
+                    onClick={() => handleSelectHistory(analysis)}
+                    className={`w-full text-left rounded-xl border px-3 py-3 transition-colors ${
+                      isSelected
+                        ? 'border-blue-200 bg-blue-50'
+                        : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <FileTypeBadge type={analysis.fileType} />
+                      <span className="font-medium text-gray-700 truncate">
+                        {analysis.fileName}
+                      </span>
+                      {index === 0 && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium shrink-0">
+                          {t.history.latest}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-400 ml-auto shrink-0">
+                        {formatAnalysisDate(analysis.analyzedAt)}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
+                      <span>
+                        {analysis.score.total}/100
+                      </span>
+                      <span>{formatSize(analysis.fileSize)}</span>
+                      <span>{analysis.linguistic.totalWords} {t.words}</span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Error */}
         {error && (

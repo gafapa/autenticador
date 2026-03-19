@@ -8,7 +8,7 @@ import { FingerprintPanel } from './components/FingerprintPanel'
 import { analyzeLinguistics } from './analyzers/linguisticAnalyzer'
 import { calculateScore } from './analyzers/scoringEngine'
 import type { AnalysisResult, FileType } from './types/analysis'
-import { useTranslation, useLocale, type Locale } from './i18n'
+import { useTranslation, useLocale, LOCALE_OPTIONS, type Locale } from './i18n'
 
 const REPO_URL = 'https://github.com/gafapa/autenticador'
 const ANALYSIS_HISTORY_KEY = 'docforensics-analysis-history'
@@ -217,28 +217,24 @@ function FileTypeBadge({ type }: { type: FileType }) {
 }
 
 function LanguageSwitcher() {
+  const t = useTranslation()
   const { locale, setLocale } = useLocale()
-  const langs: { code: Locale; label: string }[] = [
-    { code: 'es', label: 'ES' },
-    { code: 'gl', label: 'GL' },
-    { code: 'en', label: 'EN' },
-  ]
   return (
-    <div className="flex items-center gap-1 text-sm">
-      {langs.map(({ code, label }) => (
-        <button
-          key={code}
-          onClick={() => setLocale(code)}
-          className={`px-2 py-0.5 rounded font-medium transition-colors ${
-            locale === code
-              ? 'bg-blue-600 text-white'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-          }`}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+    <label className="block">
+      <span className="sr-only">{t.languageLabel}</span>
+      <select
+        aria-label={t.languageLabel}
+        value={locale}
+        onChange={(e) => setLocale(e.target.value as Locale)}
+        className="min-h-11 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      >
+        {LOCALE_OPTIONS.map(({ code, label }) => (
+          <option key={code} value={code}>
+            {label}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }
 

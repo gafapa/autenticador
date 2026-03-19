@@ -8,7 +8,7 @@ DocForensics is a browser-only web app that analyzes PDF, DOCX, and ODT document
 
 ## Features
 
-- Multilingual UI: Spanish, Galician, and English
+- Multilingual UI: English, French, German, Spanish, Galician, Catalan, and Basque
 - Three analysis layers:
   - Metadata
   - Linguistic signals

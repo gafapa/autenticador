@@ -6,11 +6,10 @@ interface FileDropzoneProps {
   loading: boolean
 }
 
-const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.doc', '.odt']
+const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.odt']
 const ACCEPTED_MIME = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/msword',
   'application/vnd.oasis.opendocument.text',
 ]
 
@@ -85,7 +84,7 @@ export function FileDropzone({ onFile, loading }: FileDropzoneProps) {
             <p className="text-sm text-gray-400 mt-1">{t.dropzone.or}</p>
           </div>
           <div className="flex gap-2 flex-wrap justify-center">
-            {['PDF', 'DOCX', 'DOC', 'ODT'].map((ext) => (
+            {['PDF', 'DOCX', 'ODT'].map((ext) => (
               <span
                 key={ext}
                 className="px-2 py-0.5 text-xs font-mono bg-gray-100 text-gray-600 rounded"
@@ -99,7 +98,7 @@ export function FileDropzone({ onFile, loading }: FileDropzoneProps) {
           ref={inputRef}
           type="file"
           className="hidden"
-          accept=".pdf,.docx,.doc,.odt"
+          accept=".pdf,.docx,.odt"
           onChange={onInputChange}
           disabled={loading}
         />

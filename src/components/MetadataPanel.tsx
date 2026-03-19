@@ -31,6 +31,7 @@ function Row({
   title,
   yesLabel,
   noLabel,
+  showWhenEmpty,
 }: {
   label: string
   value: string | number | boolean | undefined
@@ -38,10 +39,15 @@ function Row({
   title?: string
   yesLabel?: string
   noLabel?: string
+  showWhenEmpty?: boolean
 }) {
-  if (value === undefined || value === null || value === '') return null
+  if (!showWhenEmpty && (value === undefined || value === null || value === '')) return null
   const display =
-    typeof value === 'boolean' ? (value ? (yesLabel ?? 'Sí') : (noLabel ?? 'No')) : String(value)
+    value === undefined || value === null || value === ''
+      ? '—'
+      : typeof value === 'boolean'
+      ? (value ? (yesLabel ?? 'Sí') : (noLabel ?? 'No'))
+      : String(value)
 
   return (
     <tr
@@ -68,10 +74,22 @@ export function MetadataPanel({ metadata, flags }: MetadataPanelProps) {
   const metaFlags = flags.filter((f) => f.category === 'metadata')
 
   const flagIds = new Set(metaFlags.map((f) => f.id))
-  const isEditTimeFlagged = flagIds.has('edit_time_critical') || flagIds.has('edit_time_low') || flagIds.has('edit_time_suspicious')
-  const isRevFlagged = flagIds.has('revisions_one') || flagIds.has('revisions_low')
-  const isDateFlagged = flagIds.has('dates_identical') || flagIds.has('dates_close')
-  const isAuthorFlagged = flagIds.has('no_author')
+  const isEditTimeFlagged = [
+    'edit_time_critical',
+    'edit_time_very_low',
+    'edit_time_low',
+    'edit_time_suspicious',
+  ].some((id) => flagIds.has(id))
+  const isRevFlagged = [
+    'revisions_zero',
+    'revisions_one',
+    'revisions_low',
+    'revisions_medium',
+  ].some((id) => flagIds.has(id))
+  const isDateFlagged = ['dates_identical', 'dates_very_close', 'dates_close'].some((id) =>
+    flagIds.has(id)
+  )
+  const isAuthorFlagged = ['no_author', 'generic_author'].some((id) => flagIds.has(id))
 
   return (
     <section className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
@@ -118,7 +136,14 @@ export function MetadataPanel({ metadata, flags }: MetadataPanelProps) {
 
           <table className="w-full">
             <tbody>
-              <Row label={tm.author} value={metadata.author} flagged={isAuthorFlagged} yesLabel={tm.yes} noLabel={tm.no} />
+              <Row
+                label={tm.author}
+                value={metadata.author}
+                flagged={isAuthorFlagged}
+                yesLabel={tm.yes}
+                noLabel={tm.no}
+                showWhenEmpty={isAuthorFlagged}
+              />
               <Row label={tm.lastModifiedBy} value={metadata.lastModifiedBy} yesLabel={tm.yes} noLabel={tm.no} />
               <Row label={tm.title} value={metadata.title} yesLabel={tm.yes} noLabel={tm.no} />
               <Row label={tm.subject} value={metadata.subject} yesLabel={tm.yes} noLabel={tm.no} />

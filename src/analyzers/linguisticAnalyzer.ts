@@ -60,7 +60,7 @@ const FIRST_PERSON_PRONOUNS = [
 ]
 
 function splitSentences(text: string): string[] {
-  const raw = text.match(/[^.!?…]+[.!?…]+/g) ?? []
+  const raw = text.match(/[^.!?…\n]+[.!?…]?/g) ?? []
   return raw.map((s) => s.trim()).filter((s) => s.split(/\s+/).length >= 3)
 }
 

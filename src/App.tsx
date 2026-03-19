@@ -19,7 +19,6 @@ function detectFileType(file: File): FileType {
     file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   )
     return 'docx'
-  if (ext === 'doc' || file.type === 'application/msword') return 'docx'
   if (ext === 'odt' || file.type === 'application/vnd.oasis.opendocument.text')
     return 'odt'
   return 'unknown'

@@ -97,6 +97,8 @@ Open [http://localhost:5173](http://localhost:5173).
 npm run build
 ```
 
+The production bundle is generated in `dist/`.
+
 ## Disclaimer
 
 This tool provides indicative analysis only and does not constitute definitive proof of AI authorship or plagiarism. No single signal is conclusive; multiple convergent indicators are required.

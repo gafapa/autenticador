@@ -26,6 +26,7 @@ DocForensics is a client-side React application built with Vite and TypeScript. 
 - `src/analyzers/`: format-specific extraction and scoring logic
 - Paragraph boundaries are preserved where possible so style-shift analysis can work on DOCX and ODT inputs.
 - `src/i18n/`: localized copy and locale definitions for English, French, German, Spanish, Galician, Catalan, and Basque
+- The header language switcher uses a single accessible `<select>` so all supported locales fit on desktop and mobile.
 - `src/types/analysis.ts`: shared types
 - `src/utils/reportPdf.ts`: client-side PDF report builder loaded on demand, with a summary cover page and per-document detail pages
 
@@ -36,6 +37,7 @@ DocForensics is a client-side React application built with Vite and TypeScript. 
 - `pdfjs-dist` runs through a dedicated worker imported with `?worker`.
 - `vite-plugin-pwa` generates the web manifest and service worker.
 - The app is configured for GitHub Pages deployment under `/autenticador/`.
+- Production artifacts are emitted to `dist/`.
 
 ## Constraints
 

@@ -11,6 +11,8 @@ interface ReportOptions {
 const PAGE_MARGIN = 14
 const FOOTER_HEIGHT = 10
 const LINE_HEIGHT = 4.5
+const ROW_TOP_PADDING = 4
+const ROW_BOTTOM_PADDING = 3
 
 const LEVEL_STYLES: Record<
   AnalysisResult['score']['level'],
@@ -103,6 +105,18 @@ function splitText(doc: any, text: string, width: number): string[] {
   return doc.splitTextToSize(text || '-', width) as string[]
 }
 
+function drawLines(
+  doc: any,
+  lines: string[],
+  x: number,
+  top: number,
+  lineHeight: number
+) {
+  lines.forEach((line, index) => {
+    doc.text(line, x, top + index * lineHeight)
+  })
+}
+
 export async function generateAnalysisPdfReport({
   analyses,
   locale,
@@ -133,31 +147,6 @@ export async function generateAnalysisPdfReport({
   const startNewPage = () => {
     doc.addPage()
     y = PAGE_MARGIN
-  }
-
-  const drawTextBlock = (
-    text: string,
-    x: number,
-    width: number,
-    options?: {
-      fontSize?: number
-      fontStyle?: 'normal' | 'bold'
-      color?: RgbColor
-      lineHeight?: number
-    }
-  ): number => {
-    const fontSize = options?.fontSize ?? 10
-    const fontStyle = options?.fontStyle ?? 'normal'
-    const color = options?.color ?? [51, 65, 85]
-    const lineHeight = options?.lineHeight ?? LINE_HEIGHT
-    const lines = splitText(doc, text, width)
-
-    doc.setFont('helvetica', fontStyle)
-    doc.setFontSize(fontSize)
-    doc.setTextColor(...color)
-    doc.text(lines, x, y)
-
-    return lines.length * lineHeight
   }
 
   const drawMetricCard = (
@@ -196,7 +185,7 @@ export async function generateAnalysisPdfReport({
     const rowHeights = rows.map((row) => {
       const labelLines = splitText(doc, row.label, labelWidth)
       const valueLines = splitText(doc, row.value, valueWidth)
-      return Math.max(labelLines.length, valueLines.length) * LINE_HEIGHT + 2
+      return Math.max(labelLines.length, valueLines.length) * LINE_HEIGHT + ROW_TOP_PADDING + ROW_BOTTOM_PADDING
     })
 
     const height = 12 + rowHeights.reduce((sum, rowHeight) => sum + rowHeight, 0) + 4
@@ -217,21 +206,22 @@ export async function generateAnalysisPdfReport({
       const labelLines = splitText(doc, row.label, labelWidth)
       const valueLines = splitText(doc, row.value, valueWidth)
       const blockHeight = rowHeights[index]
+      const textTop = currentY + ROW_TOP_PADDING
 
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(8)
       doc.setTextColor(71, 85, 105)
-      doc.text(labelLines, PAGE_MARGIN + 4, currentY)
+      drawLines(doc, labelLines, PAGE_MARGIN + 4, textTop, LINE_HEIGHT)
 
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(8.5)
       doc.setTextColor(15, 23, 42)
-      doc.text(valueLines, PAGE_MARGIN + 4 + labelWidth + 4, currentY)
+      drawLines(doc, valueLines, PAGE_MARGIN + 4 + labelWidth + 4, textTop, LINE_HEIGHT)
 
       currentY += blockHeight
       if (index < rows.length - 1) {
         doc.setDrawColor(226, 232, 240)
-        doc.line(PAGE_MARGIN + 4, currentY - 1.5, pageWidth - PAGE_MARGIN - 4, currentY - 1.5)
+        doc.line(PAGE_MARGIN + 4, currentY - 1, pageWidth - PAGE_MARGIN - 4, currentY - 1)
       }
     })
 
@@ -343,7 +333,7 @@ export async function generateAnalysisPdfReport({
       const severityStyle = SEVERITY_STYLES[flag.severity]
       const text = `${flag.label}: ${flag.detail}`
       const lines = splitText(doc, text, contentWidth - 10)
-      const height = lines.length * LINE_HEIGHT + 7
+      const height = lines.length * LINE_HEIGHT + ROW_TOP_PADDING + ROW_BOTTOM_PADDING
       ensureSpace(height + 2)
 
       doc.setFillColor(...severityStyle.fill)
@@ -355,7 +345,7 @@ export async function generateAnalysisPdfReport({
 
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(8.5)
-      doc.text(lines, PAGE_MARGIN + 16, y + 5)
+      drawLines(doc, lines, PAGE_MARGIN + 16, y + ROW_TOP_PADDING + 1, LINE_HEIGHT)
       y += height + 2
     })
   }

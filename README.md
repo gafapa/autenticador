@@ -68,10 +68,10 @@ Legacy binary `.doc` files are not supported.
 
 ## Tech stack
 
-- React 18
-- Vite 6
-- TypeScript
-- Tailwind CSS 3
+- React 19
+- Vite 8
+- TypeScript 5.9
+- Tailwind CSS 4
 - `pdfjs-dist`
 - `jszip`
 - `fast-xml-parser`

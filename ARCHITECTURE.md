@@ -29,7 +29,8 @@ DocForensics is a client-side React application built with Vite and TypeScript. 
 
 ## Build and delivery
 
-- Vite handles bundling and dynamic imports.
+- Vite 8 handles bundling and dynamic imports.
+- Tailwind CSS 4 runs through `@tailwindcss/postcss`.
 - `pdfjs-dist` runs through a dedicated worker imported with `?worker`.
 - `vite-plugin-pwa` generates the web manifest and service worker.
 - The app is configured for GitHub Pages deployment under `/autenticador/`.

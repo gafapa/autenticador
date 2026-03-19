@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import JSZip from 'jszip'
 import { FileDropzone } from './components/FileDropzone'
 import { ScoreGauge } from './components/ScoreGauge'
 import { MetadataPanel } from './components/MetadataPanel'
@@ -11,6 +12,11 @@ import { useTranslation, useLocale, type Locale } from './i18n'
 
 const REPO_URL = 'https://github.com/gafapa/autenticador'
 const ANALYSIS_HISTORY_KEY = 'docforensics-analysis-history'
+const ZIP_MIME_TYPES = [
+  'application/zip',
+  'application/x-zip-compressed',
+  'multipart/x-zip',
+]
 
 function getAnalysisId(result: AnalysisResult): string {
   return `${result.analyzedAt.toISOString()}::${result.fileName}::${result.fileSize}`
@@ -72,6 +78,72 @@ function detectFileType(file: File): FileType {
   if (ext === 'odt' || file.type === 'application/vnd.oasis.opendocument.text')
     return 'odt'
   return 'unknown'
+}
+
+function getMimeTypeForFileName(fileName: string): string {
+  const ext = fileName.split('.').pop()?.toLowerCase()
+  if (ext === 'pdf') return 'application/pdf'
+  if (ext === 'docx') {
+    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  }
+  if (ext === 'odt') return 'application/vnd.oasis.opendocument.text'
+  return 'application/octet-stream'
+}
+
+function isZipFile(file: File): boolean {
+  const ext = file.name.split('.').pop()?.toLowerCase()
+  return ext === 'zip' || ZIP_MIME_TYPES.includes(file.type)
+}
+
+function sanitizeZipEntryName(zipName: string, entryName: string): string {
+  const zipBaseName = zipName.replace(/\.zip$/i, '')
+  return `${zipBaseName}__${entryName.replace(/[\\/]+/g, '__')}`
+}
+
+async function extractSupportedFilesFromZip(
+  file: File,
+  emptyZipMsg: (name: string) => string
+): Promise<File[]> {
+  const zip = await JSZip.loadAsync(await file.arrayBuffer())
+  const supportedEntries = Object.values(zip.files)
+    .filter((entry) => !entry.dir)
+    .filter((entry) => {
+      const ext = entry.name.split('.').pop()?.toLowerCase()
+      return ext === 'pdf' || ext === 'docx' || ext === 'odt'
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  if (supportedEntries.length === 0) {
+    throw new Error(emptyZipMsg(file.name))
+  }
+
+  return Promise.all(
+    supportedEntries.map(async (entry) => {
+      const content = await entry.async('uint8array')
+      const fileBytes = Uint8Array.from(content)
+      return new File([fileBytes], sanitizeZipEntryName(file.name, entry.name), {
+        type: getMimeTypeForFileName(entry.name),
+      })
+    })
+  )
+}
+
+async function expandUploadedFiles(
+  files: File[],
+  emptyZipMsg: (name: string) => string
+): Promise<File[]> {
+  const expandedFiles: File[] = []
+
+  for (const file of files) {
+    if (isZipFile(file)) {
+      expandedFiles.push(...(await extractSupportedFilesFromZip(file, emptyZipMsg)))
+      continue
+    }
+
+    expandedFiles.push(file)
+  }
+
+  return expandedFiles
 }
 
 async function analyzeFile(file: File, errorMsg: string): Promise<AnalysisResult> {
@@ -172,8 +244,11 @@ function LanguageSwitcher() {
 
 export default function App() {
   const t = useTranslation()
-  const [history, setHistory] = useState<AnalysisResult[]>(loadAnalysisHistory)
-  const [result, setResult] = useState<AnalysisResult | null>(() => loadAnalysisHistory()[0] ?? null)
+  const [history, setHistory] = useState<AnalysisResult[]>(() => loadAnalysisHistory())
+  const [result, setResult] = useState<AnalysisResult | null>(() => {
+    const initialHistory = loadAnalysisHistory()
+    return initialHistory[0] ?? null
+  })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showText, setShowText] = useState(false)
@@ -194,16 +269,35 @@ export default function App() {
     }
   }, [history, result])
 
-  const handleFile = useCallback(
-    async (file: File) => {
+  const handleFiles = useCallback(
+    async (files: File[]) => {
       setLoading(true)
       setError(null)
       setResult(null)
       setShowText(false)
       try {
-        const r = await analyzeFile(file, t.unsupportedFileType)
-        setResult(r)
-        setHistory((prev) => [r, ...prev])
+        const expandedFiles = await expandUploadedFiles(files, t.zipNoSupportedDocuments)
+        const results: AnalysisResult[] = []
+        const failures: string[] = []
+
+        for (const file of expandedFiles) {
+          try {
+            results.push(await analyzeFile(file, t.unsupportedFileType))
+          } catch (e) {
+            failures.push(e instanceof Error ? `${file.name}: ${e.message}` : file.name)
+          }
+        }
+
+        if (results.length === 0) {
+          throw new Error(failures[0] ?? t.errorAnalyzing)
+        }
+
+        setResult(results[0])
+        setHistory((prev) => [...results, ...prev])
+
+        if (failures.length > 0) {
+          setError(t.partialAnalysis(failures.length, results.length))
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : t.errorAnalyzing)
       } finally {
@@ -269,7 +363,7 @@ export default function App() {
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
         {/* Upload */}
-        <FileDropzone onFile={handleFile} loading={loading} />
+        <FileDropzone onFiles={handleFiles} loading={loading} />
 
         {history.length > 0 && (
           <section className="bg-white rounded-2xl border border-gray-200 overflow-hidden">

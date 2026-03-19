@@ -6,8 +6,8 @@ DocForensics is a client-side React application built with Vite and TypeScript. 
 
 ## Processing flow
 
-1. `src/components/FileDropzone.tsx` accepts supported uploads: `.pdf`, `.docx`, `.odt`.
-2. `src/App.tsx` detects the file type and dynamically imports the matching analyzer.
+1. `src/components/FileDropzone.tsx` accepts batch uploads for `.pdf`, `.docx`, `.odt`, and `.zip`.
+2. `src/App.tsx` expands ZIP archives locally with `jszip`, filters supported entries, then detects each file type and dynamically imports the matching analyzer.
 3. Analyzer modules in `src/analyzers/` extract raw text and metadata:
    - `pdfAnalyzer.ts`
    - `docxAnalyzer.ts`
@@ -21,7 +21,7 @@ DocForensics is a client-side React application built with Vite and TypeScript. 
 
 ## Frontend structure
 
-- `src/App.tsx`: orchestration, result state, local history persistence, export flow
+- `src/App.tsx`: orchestration, batch upload expansion, result state, local history persistence, export flow
 - `src/components/`: upload area and analysis panels
 - `src/analyzers/`: format-specific extraction and scoring logic
 - Paragraph boundaries are preserved where possible so style-shift analysis can work on DOCX and ODT inputs.
@@ -39,5 +39,6 @@ DocForensics is a client-side React application built with Vite and TypeScript. 
 ## Constraints
 
 - Legacy binary `.doc` files are intentionally unsupported.
+- ZIP processing is fully local and only extracts supported file types from the archive.
 - Heuristics are investigative signals, not proof.
 - The repository currently has no first-party automated tests.

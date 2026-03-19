@@ -16,9 +16,14 @@ export const TRANSLATIONS = {
     },
     footer: 'Análisis 100% local — ningún dato sale de tu dispositivo · Código abierto',
     repoLink: 'Ver código fuente',
-    unsupportedFormat: (name: string) => `Formato no soportado: ${name}. Usa PDF, DOCX o ODT.`,
+    unsupportedFormat: (name: string) =>
+      `Formato no soportado: ${name}. Usa PDF, DOCX, ODT o ZIP.`,
     errorAnalyzing: 'Error al analizar el documento.',
     unsupportedFileType: 'Formato de archivo no soportado.',
+    zipNoSupportedDocuments: (name: string) =>
+      `El ZIP ${name} no contiene documentos PDF, DOCX u ODT compatibles.`,
+    partialAnalysis: (failed: number, succeeded: number) =>
+      `Se analizaron ${succeeded} documentos y fallaron ${failed}.`,
     note: 'Nota',
     disclaimer:
       'Este análisis es orientativo y no constituye prueba definitiva. Ninguna señal aislada es concluyente — se requieren múltiples indicadores convergentes. Los modelos de IA avanzados pueden eludir algunas métricas lingüísticas.',
@@ -44,9 +49,9 @@ export const TRANSLATIONS = {
     alert: 'alerta',
     alerts: 'alertas',
     dropzone: {
-      analyzing: 'Analizando documento...',
-      title: 'Arrastra un documento aquí',
-      or: 'o haz clic para seleccionar',
+      analyzing: 'Analizando documentos...',
+      title: 'Arrastra documentos o un ZIP aquí',
+      or: 'o haz clic para seleccionar varios',
     },
     score: {
       metadata: 'Metadata',
@@ -173,9 +178,14 @@ export const TRANSLATIONS = {
     },
     footer: 'Análise 100% local — ningún dato sae do teu dispositivo · Código aberto',
     repoLink: 'Ver código fonte',
-    unsupportedFormat: (name: string) => `Formato non soportado: ${name}. Usa PDF, DOCX ou ODT.`,
+    unsupportedFormat: (name: string) =>
+      `Formato non soportado: ${name}. Usa PDF, DOCX, ODT ou ZIP.`,
     errorAnalyzing: 'Erro ao analizar o documento.',
     unsupportedFileType: 'Formato de arquivo non soportado.',
+    zipNoSupportedDocuments: (name: string) =>
+      `O ZIP ${name} non contén documentos PDF, DOCX ou ODT compatibles.`,
+    partialAnalysis: (failed: number, succeeded: number) =>
+      `Analizáronse ${succeeded} documentos e fallaron ${failed}.`,
     note: 'Nota',
     disclaimer:
       'Esta análise é orientativa e non constitúe proba definitiva. Ningunha sinal illada é concluínte — requírense múltiples indicadores converxentes. Os modelos de IA avanzados poden eludir algunhas métricas lingüísticas.',
@@ -201,9 +211,9 @@ export const TRANSLATIONS = {
     alert: 'alerta',
     alerts: 'alertas',
     dropzone: {
-      analyzing: 'Analizando documento...',
-      title: 'Arrastra un documento aquí',
-      or: 'ou fai clic para seleccionar',
+      analyzing: 'Analizando documentos...',
+      title: 'Arrastra documentos ou un ZIP aquí',
+      or: 'ou fai clic para seleccionar varios',
     },
     score: {
       metadata: 'Metadatos',
@@ -330,9 +340,14 @@ export const TRANSLATIONS = {
     },
     footer: '100% local analysis — no data leaves your device · Open source',
     repoLink: 'View source code',
-    unsupportedFormat: (name: string) => `Unsupported format: ${name}. Use PDF, DOCX, or ODT.`,
+    unsupportedFormat: (name: string) =>
+      `Unsupported format: ${name}. Use PDF, DOCX, ODT, or ZIP.`,
     errorAnalyzing: 'Error analyzing the document.',
     unsupportedFileType: 'Unsupported file format.',
+    zipNoSupportedDocuments: (name: string) =>
+      `The ZIP file ${name} does not contain any supported PDF, DOCX, or ODT documents.`,
+    partialAnalysis: (failed: number, succeeded: number) =>
+      `Analyzed ${succeeded} documents and failed to process ${failed}.`,
     note: 'Note',
     disclaimer:
       'This analysis is indicative and does not constitute definitive proof. No single signal is conclusive — multiple convergent indicators are required. Advanced AI models may evade some linguistic metrics.',
@@ -358,9 +373,9 @@ export const TRANSLATIONS = {
     alert: 'alert',
     alerts: 'alerts',
     dropzone: {
-      analyzing: 'Analyzing document...',
-      title: 'Drop a document here',
-      or: 'or click to select',
+      analyzing: 'Analyzing documents...',
+      title: 'Drop documents or a ZIP here',
+      or: 'or click to select multiple files',
     },
     score: {
       metadata: 'Metadata',

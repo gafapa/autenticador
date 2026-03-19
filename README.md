@@ -19,6 +19,7 @@ DocForensics is a browser-only web app that analyzes PDF, DOCX, and ODT document
 - Risk score from 0 to 100 with four levels: Low, Moderate, High, Critical
 - JSON export of the full report
 - Persistent local history of analyses restored after a page reload
+- Multi-file upload, including ZIP archives expanded locally in the browser
 - No backend
 
 ## Supported formats
@@ -26,6 +27,7 @@ DocForensics is a browser-only web app that analyzes PDF, DOCX, and ODT document
 - PDF
 - DOCX
 - ODT
+- ZIP archives containing PDF, DOCX, or ODT files
 
 Legacy binary `.doc` files are not supported.
 

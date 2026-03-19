@@ -2,15 +2,18 @@ import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from '../i18n'
 
 interface FileDropzoneProps {
-  onFile: (file: File) => void
+  onFiles: (files: File[]) => void
   loading: boolean
 }
 
-const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.odt']
+const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.odt', '.zip']
 const ACCEPTED_MIME = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.oasis.opendocument.text',
+  'application/zip',
+  'application/x-zip-compressed',
+  'multipart/x-zip',
 ]
 
 function isAccepted(file: File): boolean {
@@ -19,41 +22,47 @@ function isAccepted(file: File): boolean {
   return ACCEPTED_EXTENSIONS.includes(ext)
 }
 
-export function FileDropzone({ onFile, loading }: FileDropzoneProps) {
+export function FileDropzone({ onFiles, loading }: FileDropzoneProps) {
   const t = useTranslation()
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const handleFile = useCallback(
-    (file: File) => {
-      if (!isAccepted(file)) {
-        setError(t.unsupportedFormat(file.name))
+  const handleFiles = useCallback(
+    (files: File[]) => {
+      const invalidFile = files.find((file) => !isAccepted(file))
+      if (invalidFile) {
+        setError(t.unsupportedFormat(invalidFile.name))
         return
       }
+
+      if (files.length === 0) {
+        return
+      }
+
       setError(null)
-      onFile(file)
+      onFiles(files)
     },
-    [onFile, t]
+    [onFiles, t]
   )
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault()
       setDragging(false)
-      const file = e.dataTransfer.files[0]
-      if (file) handleFile(file)
+      const files = Array.from(e.dataTransfer.files)
+      handleFiles(files)
     },
-    [handleFile]
+    [handleFiles]
   )
 
   const onInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0]
-      if (file) handleFile(file)
+      const files = Array.from(e.target.files ?? [])
+      handleFiles(files)
       e.target.value = ''
     },
-    [handleFile]
+    [handleFiles]
   )
 
   return (
@@ -84,7 +93,7 @@ export function FileDropzone({ onFile, loading }: FileDropzoneProps) {
             <p className="text-sm text-gray-400 mt-1">{t.dropzone.or}</p>
           </div>
           <div className="flex gap-2 flex-wrap justify-center">
-            {['PDF', 'DOCX', 'ODT'].map((ext) => (
+            {['PDF', 'DOCX', 'ODT', 'ZIP'].map((ext) => (
               <span
                 key={ext}
                 className="px-2 py-0.5 text-xs font-mono bg-gray-100 text-gray-600 rounded"
@@ -98,7 +107,8 @@ export function FileDropzone({ onFile, loading }: FileDropzoneProps) {
           ref={inputRef}
           type="file"
           className="hidden"
-          accept=".pdf,.docx,.odt"
+          accept=".pdf,.docx,.odt,.zip"
+          multiple
           onChange={onInputChange}
           disabled={loading}
         />

@@ -1,16 +1,19 @@
+import PdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker'
+
 import type { DocumentMetadata } from '../types/analysis'
 
 // pdfjs-dist se carga dinámicamente para evitar problemas con workers
 let pdfjsLib: typeof import('pdfjs-dist') | null = null
+let pdfWorker: Worker | null = null
 
 async function getPdfjs() {
   if (!pdfjsLib) {
     pdfjsLib = await import('pdfjs-dist')
-    // Usar worker local desde node_modules (CDN de respaldo)
-    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-      'pdfjs-dist/build/pdf.worker.mjs',
-      import.meta.url
-    ).href
+  }
+
+  if (!pdfWorker) {
+    pdfWorker = new PdfWorker()
+    pdfjsLib.GlobalWorkerOptions.workerPort = pdfWorker
   }
   return pdfjsLib
 }
@@ -45,10 +48,20 @@ function extractFromXmp(xmpStr: string, key: string): string | undefined {
   return undefined
 }
 
+function scanPdfStructure(arrayBuffer: ArrayBuffer) {
+  const rawPdf = new TextDecoder('latin1').decode(new Uint8Array(arrayBuffer))
+
+  return {
+    hasC2paManifest: /c2pa/i.test(rawPdf),
+    hasEmbeddedFiles: /\/EmbeddedFiles\b|\/Filespec\b|\/AF\b/.test(rawPdf),
+  }
+}
+
 export async function analyzePdf(file: File): Promise<PdfAnalysisResult> {
   const pdfjs = await getPdfjs()
   const arrayBuffer = await file.arrayBuffer()
   const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise
+  const structure = scanPdfStructure(arrayBuffer)
 
   // --- Metadata ---
   const metaData = await pdf.getMetadata()
@@ -66,13 +79,62 @@ export async function analyzePdf(file: File): Promise<PdfAnalysisResult> {
     createdAt: parseDate(info.CreationDate || extractFromXmp(xmpRaw, 'xmp:CreateDate')),
     modifiedAt: parseDate(info.ModDate || extractFromXmp(xmpRaw, 'xmp:ModifyDate')),
     pageCount: pdf.numPages,
+    hasC2paManifest: structure.hasC2paManifest,
+    hasEmbeddedFiles: structure.hasEmbeddedFiles,
   }
 
   // --- Text extraction ---
   const textParts: string[] = []
+  let totalTextItems = 0
+  let tinyTextItemCount = 0
+  let overlappingTextItemCount = 0
+  let suspiciousTextLayerPages = 0
+  const seenTextItems = new Set<string>()
+
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i)
     const content = await page.getTextContent()
+    let pageTextItems = 0
+    let pageTinyTextItems = 0
+
+    for (const item of content.items) {
+      if (!('str' in item)) continue
+      const text = item.str.trim()
+      if (!text) continue
+
+      const transform = Array.isArray(item.transform) ? item.transform : [0, 0, 0, 0, 0, 0]
+      const height =
+        typeof item.height === 'number' && Number.isFinite(item.height)
+          ? item.height
+          : Math.abs(transform[3] ?? 0)
+
+      pageTextItems += 1
+      totalTextItems += 1
+
+      if (height > 0 && height < 3) {
+        tinyTextItemCount += 1
+        pageTinyTextItems += 1
+      }
+
+      const positionKey = [
+        i,
+        Math.round((transform[4] ?? 0) * 10),
+        Math.round((transform[5] ?? 0) * 10),
+        Math.round(height * 10),
+        text,
+      ].join(':')
+
+      if (seenTextItems.has(positionKey)) {
+        overlappingTextItemCount += 1
+      } else {
+        seenTextItems.add(positionKey)
+      }
+    }
+
+    if (pageTextItems >= 40 && pageTinyTextItems / pageTextItems >= 0.5) {
+      suspiciousTextLayerPages += 1
+    }
+
     const pageText = content.items
       .map((item) => ('str' in item ? item.str : ''))
       .join(' ')
@@ -83,6 +145,10 @@ export async function analyzePdf(file: File): Promise<PdfAnalysisResult> {
   // Contar palabras aproximadas
   const words = text.trim().split(/\s+/).filter(Boolean)
   metadata.wordCount = words.length
+  metadata.tinyTextItemCount = tinyTextItemCount || undefined
+  metadata.tinyTextRatio = totalTextItems ? tinyTextItemCount / totalTextItems : undefined
+  metadata.overlappingTextItemCount = overlappingTextItemCount || undefined
+  metadata.suspiciousTextLayerPages = suspiciousTextLayerPages || undefined
 
   return { metadata, text }
 }

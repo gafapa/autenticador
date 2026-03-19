@@ -124,5 +124,12 @@ export async function analyzeOdt(file: File): Promise<OdtAnalysisResult> {
     description: typeof description === 'string' ? description : undefined,
   }
 
-  return { metadata, text: text.replace(/\s+/g, ' ').trim() }
+  return {
+    metadata,
+    text: text
+      .split(/\n+/)
+      .map((paragraph) => paragraph.replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .join('\n\n'),
+  }
 }

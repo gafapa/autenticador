@@ -33,6 +33,23 @@ export interface DocumentMetadata {
   hasRevisionIds?: boolean  // rsid en DOCX = presencia de historial Word
   fontFamilyCount?: number  // nº de fuentes distintas (mezcla = copia-pega)
   fontFamilies?: string[]   // lista de fuentes detectadas
+  rsidCount?: number
+  rsidCoverageRatio?: number
+  dominantRsidRatio?: number
+  paragraphStyleCount?: number
+  paragraphStyles?: string[]
+  hasEmbeddedFiles?: boolean
+  hasC2paManifest?: boolean
+  tinyTextItemCount?: number
+  tinyTextRatio?: number
+  overlappingTextItemCount?: number
+  suspiciousTextLayerPages?: number
+}
+
+export interface StyleChangeHotspot {
+  fromSegment: number
+  toSegment: number
+  distance: number
 }
 
 export interface LinguisticMetrics {
@@ -74,6 +91,13 @@ export interface LinguisticMetrics {
 
   // Caracteres invisibles (posibles marcas de agua o manipulación)
   zeroWidthCharCount: number
+
+  // Cambio de estilo por segmentos
+  segmentCount: number
+  styleChangeAverage: number
+  styleChangeMax: number
+  styleChangeHotspotCount: number
+  styleChangeHotspots: StyleChangeHotspot[]
 }
 
 export interface RiskFlag {

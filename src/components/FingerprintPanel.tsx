@@ -8,11 +8,17 @@ interface FingerprintPanelProps {
   fileType: FileType
 }
 
+function formatRatio(value?: number): string {
+  return value === undefined ? '—' : `${(value * 100).toFixed(0)}%`
+}
+
 export function FingerprintPanel({ metadata, flags, fileType }: FingerprintPanelProps) {
   const t = useTranslation()
   const tf = t.fingerprint
   const [open, setOpen] = useState(true)
   const fpFlags = flags.filter((f) => f.category === 'fingerprint')
+  const yesLabel = t.metadata.yes
+  const noLabel = t.metadata.no
 
   const softwareFields = [
     metadata.creator,
@@ -43,7 +49,7 @@ export function FingerprintPanel({ metadata, flags, fileType }: FingerprintPanel
     if (/itext/.test(lower)) return { label: 'iText (Java)', icon: '☕', type: 'library', badge: tf.libBadge }
     if (/apache poi|org\.apache/.test(lower)) return { label: 'Apache POI (Java)', icon: '☕', type: 'library', badge: tf.libBadge }
     if (/pandoc/.test(lower)) return { label: 'Pandoc', icon: '⚙️', type: 'library', badge: tf.libBadge }
-    if (/latex|pdflatex|xelatex|lualatex|tex/.test(lower)) return { label: 'LaTeX', icon: '🔤', type: 'library', badge: tf.libBadge }
+    if (/\b(?:latex|pdflatex|xelatex|lualatex)\b/.test(lower)) return { label: 'LaTeX', icon: '🔤', type: 'library', badge: tf.libBadge }
     if (/asciidoc|asciidoctor/.test(lower)) return { label: 'AsciiDoc', icon: '⚙️', type: 'library', badge: tf.libBadge }
     if (/sphinx|docutils/.test(lower)) return { label: 'Sphinx / Docutils (Python)', icon: '🐍', type: 'library', badge: tf.libBadge }
     if (/ilovepdf|smallpdf|pdf24|online2pdf|sodapdf|sejda/.test(lower))
@@ -113,6 +119,7 @@ export function FingerprintPanel({ metadata, flags, fileType }: FingerprintPanel
                   const badgeColor = isWarning
                     ? 'text-red-600 bg-red-100'
                     : 'text-yellow-700 bg-yellow-100'
+
                   return (
                     <div
                       key={i}
@@ -161,6 +168,69 @@ export function FingerprintPanel({ metadata, flags, fileType }: FingerprintPanel
                   <span className="mr-1">{metadata.revisions && metadata.revisions > 3 ? '✅' : '⚠'}</span>
                   <span className={metadata.revisions && metadata.revisions > 3 ? 'text-green-700' : 'text-red-700'}>
                     {metadata.revisions ?? 0} {metadata.revisions !== 1 ? tf.revisions : tf.revision}
+                  </span>
+                </div>
+                <div className={`rounded-lg p-2.5 border text-sm ${metadata.rsidCount && metadata.rsidCount > 2 ? 'border-green-200 bg-green-50' : 'border-yellow-200 bg-yellow-50'}`}>
+                  <span className="mr-1">{metadata.rsidCount && metadata.rsidCount > 2 ? '✅' : '⚠'}</span>
+                  <span className={metadata.rsidCount && metadata.rsidCount > 2 ? 'text-green-700' : 'text-yellow-800'}>
+                    {tf.rsidCount}: {metadata.rsidCount ?? 0}
+                  </span>
+                </div>
+                <div className={`rounded-lg p-2.5 border text-sm ${metadata.rsidCoverageRatio !== undefined && metadata.rsidCoverageRatio >= 0.65 ? 'border-green-200 bg-green-50' : 'border-yellow-200 bg-yellow-50'}`}>
+                  <span className="mr-1">{metadata.rsidCoverageRatio !== undefined && metadata.rsidCoverageRatio >= 0.65 ? '✅' : '⚠'}</span>
+                  <span className={metadata.rsidCoverageRatio !== undefined && metadata.rsidCoverageRatio >= 0.65 ? 'text-green-700' : 'text-yellow-800'}>
+                    {tf.rsidCoverage}: {formatRatio(metadata.rsidCoverageRatio)}
+                  </span>
+                </div>
+                <div className="rounded-lg p-2.5 border text-sm border-gray-100 bg-gray-50">
+                  <span className="mr-1">ℹ</span>
+                  <span className="text-gray-700">
+                    {tf.dominantRsid}: {formatRatio(metadata.dominantRsidRatio)}
+                  </span>
+                </div>
+                <div className="rounded-lg p-2.5 border text-sm border-gray-100 bg-gray-50 col-span-2">
+                  <span className="mr-1">ℹ</span>
+                  <span className="text-gray-700">
+                    {tf.paragraphStyles}: {metadata.paragraphStyleCount ?? 0}
+                    {metadata.paragraphStyles?.length ? ` (${metadata.paragraphStyles.join(', ')})` : ''}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {fileType === 'pdf' && (
+            <div>
+              <p className="text-sm font-medium text-gray-500 mb-2">{tf.pdfStructure}</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className={`rounded-lg p-2.5 border text-sm ${metadata.hasC2paManifest ? 'border-green-200 bg-green-50' : 'border-gray-100 bg-gray-50'}`}>
+                  <span className="mr-1">{metadata.hasC2paManifest ? '✅' : '➖'}</span>
+                  <span className={metadata.hasC2paManifest ? 'text-green-700' : 'text-gray-500'}>
+                    {tf.provenanceManifest}: {metadata.hasC2paManifest ? yesLabel : noLabel}
+                  </span>
+                </div>
+                <div className={`rounded-lg p-2.5 border text-sm ${metadata.hasEmbeddedFiles ? 'border-yellow-200 bg-yellow-50' : 'border-gray-100 bg-gray-50'}`}>
+                  <span className="mr-1">{metadata.hasEmbeddedFiles ? '⚠' : '➖'}</span>
+                  <span className={metadata.hasEmbeddedFiles ? 'text-yellow-800' : 'text-gray-500'}>
+                    {tf.embeddedFiles}: {metadata.hasEmbeddedFiles ? yesLabel : noLabel}
+                  </span>
+                </div>
+                <div className={`rounded-lg p-2.5 border text-sm ${metadata.tinyTextRatio !== undefined && metadata.tinyTextRatio >= 0.35 ? 'border-yellow-200 bg-yellow-50' : 'border-gray-100 bg-gray-50'}`}>
+                  <span className="mr-1">{metadata.tinyTextRatio !== undefined && metadata.tinyTextRatio >= 0.35 ? '⚠' : '➖'}</span>
+                  <span className={metadata.tinyTextRatio !== undefined && metadata.tinyTextRatio >= 0.35 ? 'text-yellow-800' : 'text-gray-500'}>
+                    {tf.tinyText}: {metadata.tinyTextItemCount ?? 0} ({formatRatio(metadata.tinyTextRatio)})
+                  </span>
+                </div>
+                <div className={`rounded-lg p-2.5 border text-sm ${metadata.overlappingTextItemCount ? 'border-yellow-200 bg-yellow-50' : 'border-gray-100 bg-gray-50'}`}>
+                  <span className="mr-1">{metadata.overlappingTextItemCount ? '⚠' : '➖'}</span>
+                  <span className={metadata.overlappingTextItemCount ? 'text-yellow-800' : 'text-gray-500'}>
+                    {tf.overlappingText}: {metadata.overlappingTextItemCount ?? 0}
+                  </span>
+                </div>
+                <div className="rounded-lg p-2.5 border text-sm border-gray-100 bg-gray-50 col-span-2">
+                  <span className="mr-1">ℹ</span>
+                  <span className="text-gray-700">
+                    {tf.suspiciousPages}: {metadata.suspiciousTextLayerPages ?? 0}
                   </span>
                 </div>
               </div>

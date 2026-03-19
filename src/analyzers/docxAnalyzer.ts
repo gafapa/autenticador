@@ -7,6 +7,12 @@ export interface DocxAnalysisResult {
   text: string
 }
 
+interface DocxParagraphData {
+  text: string
+  rsids: string[]
+  style?: string
+}
+
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
@@ -27,21 +33,44 @@ function parseDurationMinutes(s: unknown): number | undefined {
   return isNaN(n) ? undefined : n
 }
 
-function extractText(obj: unknown): string {
-  if (typeof obj === 'string') return obj
-  if (Array.isArray(obj)) return obj.map(extractText).join(' ')
-  if (obj && typeof obj === 'object') {
-    return Object.values(obj as Record<string, unknown>)
-      .map(extractText)
-      .join(' ')
-  }
-  return ''
+function decodeXmlEntities(text: string): string {
+  return text
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
 }
 
-// Extrae el texto de todos los elementos w:t dentro del XML del documento
-function extractDocumentText(xmlStr: string): string {
-  const matches = [...xmlStr.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
-  return matches.map((m) => m[1]).join(' ')
+function extractParagraphData(xmlStr: string): DocxParagraphData[] {
+  const paragraphMatches = [...xmlStr.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)]
+
+  return paragraphMatches.map((match) => {
+    const paragraphXml = match[0]
+      .replace(/<w:tab\b[^>]*\/>/g, ' ')
+      .replace(/<w:br\b[^>]*\/>/g, ' ')
+      .replace(/<w:cr\b[^>]*\/>/g, ' ')
+
+    const text = [...paragraphXml.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
+      .map((textMatch) => decodeXmlEntities(textMatch[1]))
+      .join('')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    const rsids = [
+      ...new Set(
+        [...paragraphXml.matchAll(/w:rsid(?:RDefault|R|P)?="([^"]+)"/g)].map(
+          (rsidMatch) => rsidMatch[1]
+        )
+      ),
+    ]
+
+    const style = paragraphXml.match(/<w:pStyle\b[^>]*w:val="([^"]+)"/)?.[1]
+
+    return { text, rsids, style }
+  })
 }
 
 // Detecta si existen atributos rsid (revision save IDs) → indica edición real en Word
@@ -140,13 +169,61 @@ export async function analyzeDocx(file: File): Promise<DocxAnalysisResult> {
   let text = ''
   let hasRevisionIds = false
   let hasTrackChanges = false
+  let rsidCount: number | undefined
+  let rsidCoverageRatio: number | undefined
+  let dominantRsidRatio: number | undefined
+  let paragraphStyleCount: number | undefined
+  let paragraphStyles: string[] | undefined
 
   const docFile = zip.file('word/document.xml')
   if (docFile) {
     const docXml = await docFile.async('string')
-    text = extractDocumentText(docXml)
+    const paragraphs = extractParagraphData(docXml)
+    const textParagraphs = paragraphs
+      .map((paragraph) => paragraph.text)
+      .filter(Boolean)
+
+    text = textParagraphs.join('\n\n')
     hasRevisionIds = detectRsid(docXml)
     hasTrackChanges = detectTrackChanges(docXml)
+
+    const paragraphsWithText = paragraphs.filter((paragraph) => paragraph.text)
+    const paragraphsWithRsid = paragraphsWithText.filter((paragraph) => paragraph.rsids.length > 0)
+    const rsidCounts = new Map<string, number>()
+
+    for (const paragraph of paragraphsWithRsid) {
+      for (const rsid of paragraph.rsids) {
+        rsidCounts.set(rsid, (rsidCounts.get(rsid) ?? 0) + 1)
+      }
+    }
+
+    rsidCount = rsidCounts.size || undefined
+    rsidCoverageRatio = paragraphsWithText.length
+      ? paragraphsWithRsid.length / paragraphsWithText.length
+      : undefined
+    dominantRsidRatio =
+      paragraphsWithRsid.length && rsidCounts.size
+        ? Math.max(...rsidCounts.values()) / paragraphsWithRsid.length
+        : undefined
+
+    const styles = [
+      ...new Set(
+        paragraphsWithText
+          .map((paragraph) => paragraph.style)
+          .filter((style): style is string => Boolean(style))
+      ),
+    ]
+    paragraphStyleCount = styles.length || undefined
+    paragraphStyles = styles.length ? styles.slice(0, 12) : undefined
+
+    if (paragraphCount === undefined && paragraphsWithText.length > 0) {
+      paragraphCount = paragraphsWithText.length
+    }
+
+    if (wordCount === undefined) {
+      const extractedWordCount = textParagraphs.join(' ').split(/\s+/).filter(Boolean).length
+      wordCount = extractedWordCount || undefined
+    }
   }
 
   const hasComments = detectComments(zip)
@@ -176,7 +253,19 @@ export async function analyzeDocx(file: File): Promise<DocxAnalysisResult> {
     hasRevisionIds,
     fontFamilyCount: fontFamilies.length,
     fontFamilies,
+    rsidCount,
+    rsidCoverageRatio,
+    dominantRsidRatio,
+    paragraphStyleCount,
+    paragraphStyles,
   }
 
-  return { metadata, text: text.replace(/\s+/g, ' ').trim() }
+  return {
+    metadata,
+    text: text
+      .split(/\n{2,}/)
+      .map((paragraph) => paragraph.replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .join('\n\n'),
+  }
 }

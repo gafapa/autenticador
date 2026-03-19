@@ -43,6 +43,7 @@ export function LinguisticPanel({ metrics, flags }: LinguisticPanelProps) {
   const [open, setOpen] = useState(true)
   const lingFlags = flags.filter((f) => f.category === 'linguistic')
   const insufficient = flags.find((f) => f.id === 'insufficient_text')
+  const visibleLingFlags = lingFlags.filter((f) => f.id !== 'insufficient_text')
 
   return (
     <section className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
@@ -53,10 +54,9 @@ export function LinguisticPanel({ metrics, flags }: LinguisticPanelProps) {
         <div className="flex items-center gap-2">
           <span className="text-xl">🔤</span>
           <span className="font-semibold text-gray-700">{tl.panelTitle}</span>
-          {lingFlags.filter(f => f.id !== 'insufficient_text').length > 0 && (
+          {visibleLingFlags.length > 0 && (
             <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
-              {lingFlags.filter(f => f.id !== 'insufficient_text').length}{' '}
-              {lingFlags.filter(f => f.id !== 'insufficient_text').length !== 1 ? t.alerts : t.alert}
+              {visibleLingFlags.length} {visibleLingFlags.length !== 1 ? t.alerts : t.alert}
             </span>
           )}
         </div>
@@ -72,9 +72,9 @@ export function LinguisticPanel({ metrics, flags }: LinguisticPanelProps) {
           )}
 
           {/* Alerts */}
-          {lingFlags.filter(f => f.id !== 'insufficient_text').length > 0 && (
+          {visibleLingFlags.length > 0 && (
             <div className="mb-4 space-y-2">
-              {lingFlags.filter(f => f.id !== 'insufficient_text').map((f) => (
+              {visibleLingFlags.map((f) => (
                 <div
                   key={f.id}
                   className={`text-sm rounded-lg px-3 py-2 flex gap-2 items-start ${
@@ -185,7 +185,47 @@ export function LinguisticPanel({ metrics, flags }: LinguisticPanelProps) {
               flagged={metrics.zeroWidthCharCount > 0}
               note={tl.invisibleNote}
             />
+            <Metric
+              label={tl.segmentCount}
+              value={metrics.segmentCount}
+              flagged={metrics.segmentCount >= 3 && metrics.styleChangeHotspotCount >= 2}
+              note={tl.segmentNote}
+            />
+            <Metric
+              label={tl.styleChangeAvg}
+              value={metrics.styleChangeAverage.toFixed(2)}
+              flagged={metrics.segmentCount >= 3 && metrics.styleChangeAverage >= 0.3}
+              note={tl.styleChangeNote}
+            />
+            <Metric
+              label={tl.styleChangeMax}
+              value={metrics.styleChangeMax.toFixed(2)}
+              flagged={metrics.segmentCount >= 3 && metrics.styleChangeMax >= 0.45}
+              note={tl.styleChangeMaxNote}
+            />
+            <Metric
+              label={tl.styleHotspots}
+              value={metrics.styleChangeHotspotCount}
+              flagged={metrics.styleChangeHotspotCount > 0}
+              note={tl.styleHotspotsNote}
+            />
           </div>
+
+          {metrics.styleChangeHotspots.length > 0 && (
+            <div className="mt-3 p-3 bg-rose-50 rounded-xl">
+              <p className="text-xs font-semibold text-rose-800 mb-2">{tl.styleHotspotList}</p>
+              <div className="flex flex-wrap gap-2">
+                {metrics.styleChangeHotspots.map((hotspot) => (
+                  <span
+                    key={`${hotspot.fromSegment}-${hotspot.toSegment}`}
+                    className="px-2 py-0.5 bg-rose-100 text-rose-800 text-xs font-mono rounded"
+                  >
+                    S{hotspot.fromSegment}-S{hotspot.toSegment}: {hotspot.distance.toFixed(2)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* AI transition phrases */}
           {metrics.aiPhrasesFound.length > 0 && (

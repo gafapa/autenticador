@@ -436,6 +436,29 @@ export function calculateScore(
         points: linguistic.zeroWidthCharCount > 5 ? 8 : 4,
       }, flags)
     }
+
+    // 11. Cambios de estilo locales — posible mezcla de autores, pega o reescritura parcial
+    if (linguistic.segmentCount >= 3) {
+      if (linguistic.styleChangeHotspotCount >= 2 && linguistic.styleChangeMax >= 0.55) {
+        linguisticScore += flagIf(true, {
+          id: 'style_change_hotspots',
+          category: 'linguistic',
+          severity: 'medium',
+          label: 'Cambios de estilo entre bloques',
+          detail: `Se detectaron ${linguistic.styleChangeHotspotCount} saltos de estilo entre segmentos. Máximo: ${linguistic.styleChangeMax.toFixed(2)}; media: ${linguistic.styleChangeAverage.toFixed(2)}.`,
+          points: 7,
+        }, flags)
+      } else if (linguistic.styleChangeMax >= 0.45) {
+        linguisticScore += flagIf(true, {
+          id: 'style_change_single',
+          category: 'linguistic',
+          severity: 'low',
+          label: 'Salto de estilo puntual',
+          detail: `Se observó un cambio fuerte entre segmentos consecutivos (máximo ${linguistic.styleChangeMax.toFixed(2)}). Puede indicar texto pegado o autoría mixta.`,
+          points: 3,
+        }, flags)
+      }
+    }
   } else {
     flags.push({
       id: 'insufficient_text',
@@ -499,6 +522,39 @@ export function calculateScore(
     }, flags)
   }
 
+  if (
+    fileType === 'docx' &&
+    metadata.hasRevisionIds &&
+    metadata.rsidCoverageRatio !== undefined &&
+    (metadata.paragraphCount ?? 0) >= 10 &&
+    metadata.rsidCoverageRatio < 0.65
+  ) {
+    fingerprintScore += flagIf(true, {
+      id: 'sparse_rsid_coverage',
+      category: 'fingerprint',
+      severity: 'medium',
+      label: 'Cobertura rsid irregular',
+      detail: `Solo ${(metadata.rsidCoverageRatio * 100).toFixed(0)}% de los párrafos tienen rsid. Puede indicar mezcla de bloques importados o edición fuera de Word.`,
+      points: 5,
+    }, flags)
+  }
+
+  if (
+    fileType === 'docx' &&
+    metadata.rsidCount !== undefined &&
+    metadata.rsidCount <= 2 &&
+    (metadata.paragraphCount ?? 0) >= 12
+  ) {
+    fingerprintScore += flagIf(true, {
+      id: 'low_rsid_diversity',
+      category: 'fingerprint',
+      severity: 'low',
+      label: 'Muy poca diversidad de rsid',
+      detail: `${metadata.rsidCount} rsid distintos para ${(metadata.paragraphCount ?? 0)} párrafos. Historial de edición muy uniforme.`,
+      points: 3,
+    }, flags)
+  }
+
   // 4. Herramienta de conversión online
   const foundConverter = ONLINE_CONVERTERS.find((c) => genStr.includes(c))
   if (foundConverter) {
@@ -533,6 +589,49 @@ export function calculateScore(
         points: 5,
       }, flags)
     }
+  }
+
+  if (fileType === 'pdf' && metadata.hasEmbeddedFiles) {
+    fingerprintScore += flagIf(true, {
+      id: 'pdf_embedded_files',
+      category: 'fingerprint',
+      severity: 'low',
+      label: 'PDF con ficheros incrustados',
+      detail: 'El PDF contiene adjuntos embebidos. No prueba manipulación, pero sí una estructura menos habitual que conviene revisar.',
+      points: 2,
+    }, flags)
+  }
+
+  if (
+    fileType === 'pdf' &&
+    metadata.tinyTextRatio !== undefined &&
+    metadata.tinyTextItemCount !== undefined &&
+    metadata.tinyTextItemCount >= 80 &&
+    metadata.tinyTextRatio >= 0.35
+  ) {
+    fingerprintScore += flagIf(true, {
+      id: 'pdf_tiny_text_layer',
+      category: 'fingerprint',
+      severity: metadata.suspiciousTextLayerPages ? 'medium' : 'low',
+      label: 'Capa de texto diminuto en PDF',
+      detail: `${metadata.tinyTextItemCount} elementos de texto muy pequeños (${(metadata.tinyTextRatio * 100).toFixed(0)}%). Puede ser una capa OCR oculta o una superposición de texto no visible.`,
+      points: metadata.suspiciousTextLayerPages ? 5 : 3,
+    }, flags)
+  }
+
+  if (
+    fileType === 'pdf' &&
+    metadata.overlappingTextItemCount !== undefined &&
+    metadata.overlappingTextItemCount >= 25
+  ) {
+    fingerprintScore += flagIf(true, {
+      id: 'pdf_overlapping_text',
+      category: 'fingerprint',
+      severity: 'medium',
+      label: 'Texto solapado en PDF',
+      detail: `${metadata.overlappingTextItemCount} repeticiones de texto en la misma posición. Puede indicar capas duplicadas, OCR superpuesto o edición estructural extraña.`,
+      points: 5,
+    }, flags)
   }
 
   fingerprintScore = Math.min(fingerprintScore, 20)

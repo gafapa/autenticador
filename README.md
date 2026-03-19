@@ -13,6 +13,9 @@ DocForensics is a browser-only web app that analyzes PDF, DOCX, and ODT document
   - Metadata
   - Linguistic signals
   - Software fingerprints
+- Segment-level style change detection for pasted or mixed-authorship blocks
+- PDF provenance and structure checks, including C2PA manifest detection, embedded files, and suspicious tiny-text layers
+- Deeper DOCX OOXML checks, including RSID coverage, RSID diversity, and paragraph style distribution
 - Risk score from 0 to 100 with four levels: Low, Moderate, High, Critical
 - JSON export of the full report
 - No backend
@@ -49,6 +52,7 @@ Legacy binary `.doc` files are not supported.
 | Low first-person pronoun ratio | AI tends to avoid personal language |
 | No interrogative sentences | AI rarely uses rhetorical questions |
 | Zero-width characters | Possible watermarking or manipulation |
+| Local style shifts between segments | Possible pasted blocks or mixed authorship |
 
 ### Software fingerprint signals
 
@@ -57,6 +61,8 @@ Legacy binary `.doc` files are not supported.
 | AI tool in creator/producer/generator metadata | Critical |
 | Programming library signature | High |
 | Missing Word revision IDs in DOCX | Medium |
+| Low RSID coverage or diversity in DOCX | Medium |
+| Embedded files or suspicious tiny-text layers in PDF | Medium |
 | Online converter signature | Medium |
 | Many font families in DOCX | Medium |
 

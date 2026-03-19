@@ -1,4 +1,4 @@
-import type { LinguisticMetrics } from '../types/analysis'
+import type { LinguisticMetrics, StyleChangeHotspot } from '../types/analysis'
 
 // Frases de transición típicas de IA (señal clásica)
 const AI_PHRASES = [
@@ -59,6 +59,14 @@ const FIRST_PERSON_PRONOUNS = [
   'i', 'my', 'mine', 'me', 'myself', 'we', 'our', 'ours', 'ourselves',
 ]
 
+interface SegmentStats {
+  avgSentenceLength: number
+  typeTokenRatio: number
+  shannonEntropy: number
+  pronounRatio: number
+  firstWordDiversity: number
+}
+
 function splitSentences(text: string): string[] {
   const raw = text.match(/[^.!?…\n]+[.!?…]?/g) ?? []
   return raw.map((s) => s.trim()).filter((s) => s.split(/\s+/).length >= 3)
@@ -76,6 +84,34 @@ function stdDev(arr: number[]): number {
   const mean = arr.reduce((a, b) => a + b, 0) / arr.length
   const variance = arr.reduce((a, b) => a + (b - mean) ** 2, 0) / arr.length
   return Math.sqrt(variance)
+}
+
+function buildStyleSegments(paragraphs: string[]): string[] {
+  const segments: string[] = []
+  let current: string[] = []
+  let currentWords = 0
+
+  for (const paragraph of paragraphs) {
+    const words = paragraph.split(/\s+/).filter(Boolean).length
+    current.push(paragraph)
+    currentWords += words
+
+    if (current.length >= 2 && currentWords >= 120) {
+      segments.push(current.join('\n\n'))
+      current = []
+      currentWords = 0
+    }
+  }
+
+  if (current.length > 0) {
+    if (segments.length > 0 && currentWords < 80) {
+      segments[segments.length - 1] = `${segments[segments.length - 1]}\n\n${current.join('\n\n')}`
+    } else {
+      segments.push(current.join('\n\n'))
+    }
+  }
+
+  return segments
 }
 
 function shannonEntropy(text: string): number {
@@ -150,10 +186,78 @@ function countZeroWidthChars(text: string): number {
   return matches?.length ?? 0
 }
 
+function calculateSegmentStats(text: string): SegmentStats {
+  const words = text.trim().split(/\s+/).filter((word) => /\w/.test(word))
+  const sentences = splitSentences(text)
+  const sentenceLengths = sentences.map((sentence) => sentence.split(/\s+/).filter(Boolean).length)
+  const avgSentenceLength =
+    sentenceLengths.length > 0
+      ? sentenceLengths.reduce((sum, length) => sum + length, 0) / sentenceLengths.length
+      : 0
+
+  return {
+    avgSentenceLength,
+    typeTokenRatio: typeTokenRatio(words),
+    shannonEntropy: shannonEntropy(text.slice(0, 4000)),
+    pronounRatio: pronounRatio(words),
+    firstWordDiversity: firstWordDiversity(sentences),
+  }
+}
+
+function segmentDistance(a: SegmentStats, b: SegmentStats): number {
+  const deltas = [
+    Math.min(Math.abs(a.avgSentenceLength - b.avgSentenceLength) / 12, 1),
+    Math.min(Math.abs(a.typeTokenRatio - b.typeTokenRatio) / 0.2, 1),
+    Math.min(Math.abs(a.shannonEntropy - b.shannonEntropy) / 0.6, 1),
+    Math.min(Math.abs(a.pronounRatio - b.pronounRatio) / 1.5, 1),
+    Math.min(Math.abs(a.firstWordDiversity - b.firstWordDiversity) / 0.25, 1),
+  ]
+
+  return deltas.reduce((sum, value) => sum + value, 0) / deltas.length
+}
+
+function analyzeStyleChanges(paragraphs: string[]) {
+  const segments = buildStyleSegments(paragraphs)
+  if (segments.length < 2) {
+    return {
+      segmentCount: segments.length,
+      styleChangeAverage: 0,
+      styleChangeMax: 0,
+      styleChangeHotspotCount: 0,
+      styleChangeHotspots: [] as StyleChangeHotspot[],
+    }
+  }
+
+  const stats = segments.map(calculateSegmentStats)
+  const distances = stats.slice(1).map((segmentStats, index) => ({
+    fromSegment: index + 1,
+    toSegment: index + 2,
+    distance: segmentDistance(stats[index], segmentStats),
+  }))
+
+  const hotspots = distances
+    .filter((distance) => distance.distance >= 0.45)
+    .sort((a, b) => b.distance - a.distance)
+    .slice(0, 5)
+
+  const distanceValues = distances.map((distance) => distance.distance)
+  const styleChangeAverage =
+    distanceValues.reduce((sum, distance) => sum + distance, 0) / distanceValues.length
+
+  return {
+    segmentCount: segments.length,
+    styleChangeAverage,
+    styleChangeMax: Math.max(...distanceValues),
+    styleChangeHotspotCount: hotspots.length,
+    styleChangeHotspots: hotspots,
+  }
+}
+
 export function analyzeLinguistics(text: string): LinguisticMetrics {
   const words = text.trim().split(/\s+/).filter((w) => /\w/.test(w))
   const sentences = splitSentences(text)
   const paragraphs = splitParagraphs(text)
+  const styleChanges = analyzeStyleChanges(paragraphs)
 
   const sentenceLengths = sentences.map((s) => s.split(/\s+/).filter(Boolean).length)
   const paragraphLengths = paragraphs.map((p) => p.split(/\s+/).filter(Boolean).length)
@@ -197,5 +301,10 @@ export function analyzeLinguistics(text: string): LinguisticMetrics {
     questionRatio: questionRatio(sentences),
     firstWordDiversity: firstWordDiversity(sentences),
     zeroWidthCharCount: countZeroWidthChars(text),
+    segmentCount: styleChanges.segmentCount,
+    styleChangeAverage: styleChanges.styleChangeAverage,
+    styleChangeMax: styleChanges.styleChangeMax,
+    styleChangeHotspotCount: styleChanges.styleChangeHotspotCount,
+    styleChangeHotspots: styleChanges.styleChangeHotspots,
   }
 }

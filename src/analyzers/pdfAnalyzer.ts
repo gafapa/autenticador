@@ -60,8 +60,8 @@ function scanPdfStructure(arrayBuffer: ArrayBuffer) {
 export async function analyzePdf(file: File): Promise<PdfAnalysisResult> {
   const pdfjs = await getPdfjs()
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise
   const structure = scanPdfStructure(arrayBuffer)
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise
 
   // --- Metadata ---
   const metaData = await pdf.getMetadata()

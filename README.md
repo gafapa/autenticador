@@ -17,7 +17,7 @@ DocForensics is a browser-only web app that analyzes PDF, DOCX, and ODT document
 - PDF provenance and structure checks, including C2PA manifest detection, embedded files, and suspicious tiny-text layers
 - Deeper DOCX OOXML checks, including RSID coverage, RSID diversity, and paragraph style distribution
 - Risk score from 0 to 100 with four levels: Low, Moderate, High, Critical
-- PDF export of the full session report across all reviewed documents
+- Rich PDF export of the full session report with color-coded summaries, score breakdowns, and per-document detail
 - Persistent local history of analyses restored after a page reload
 - Multi-file upload, including ZIP archives expanded locally in the browser
 - No backend

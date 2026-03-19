@@ -72,24 +72,21 @@ export function MetadataPanel({ metadata, flags }: MetadataPanelProps) {
   const tm = t.metadata
   const [open, setOpen] = useState(true)
   const metaFlags = flags.filter((f) => f.category === 'metadata')
+  const flagIds = new Set(flags.map((f) => f.id))
+  const hasAnyFlag = (ids: string[]) => ids.some((id) => flagIds.has(id))
 
-  const flagIds = new Set(metaFlags.map((f) => f.id))
-  const isEditTimeFlagged = [
-    'edit_time_critical',
-    'edit_time_very_low',
-    'edit_time_low',
-    'edit_time_suspicious',
-  ].some((id) => flagIds.has(id))
-  const isRevFlagged = [
-    'revisions_zero',
-    'revisions_one',
-    'revisions_low',
-    'revisions_medium',
-  ].some((id) => flagIds.has(id))
-  const isDateFlagged = ['dates_identical', 'dates_very_close', 'dates_close'].some((id) =>
-    flagIds.has(id)
-  )
-  const isAuthorFlagged = ['no_author', 'generic_author'].some((id) => flagIds.has(id))
+  const rowFlags = {
+    author: ['no_author', 'generic_author'],
+    dates: ['dates_identical', 'dates_very_close', 'dates_close'],
+    editingTime: [
+      'edit_time_critical',
+      'edit_time_very_low',
+      'edit_time_low',
+      'edit_time_suspicious',
+    ],
+    revisions: ['revisions_zero', 'revisions_one', 'revisions_low', 'revisions_medium'],
+    revisionIds: ['no_rsid'],
+  }
 
   return (
     <section className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
@@ -139,10 +136,10 @@ export function MetadataPanel({ metadata, flags }: MetadataPanelProps) {
               <Row
                 label={tm.author}
                 value={metadata.author}
-                flagged={isAuthorFlagged}
+                flagged={hasAnyFlag(rowFlags.author)}
                 yesLabel={tm.yes}
                 noLabel={tm.no}
-                showWhenEmpty={isAuthorFlagged}
+                showWhenEmpty={hasAnyFlag(rowFlags.author)}
               />
               <Row label={tm.lastModifiedBy} value={metadata.lastModifiedBy} yesLabel={tm.yes} noLabel={tm.no} />
               <Row label={tm.title} value={metadata.title} yesLabel={tm.yes} noLabel={tm.no} />
@@ -152,28 +149,28 @@ export function MetadataPanel({ metadata, flags }: MetadataPanelProps) {
               <Row
                 label={tm.createdAt}
                 value={formatDate(metadata.createdAt)}
-                flagged={isDateFlagged}
+                flagged={hasAnyFlag(rowFlags.dates)}
                 yesLabel={tm.yes}
                 noLabel={tm.no}
               />
               <Row
                 label={tm.modifiedAt}
                 value={formatDate(metadata.modifiedAt)}
-                flagged={isDateFlagged}
+                flagged={hasAnyFlag(rowFlags.dates)}
                 yesLabel={tm.yes}
                 noLabel={tm.no}
               />
               <Row
                 label={tm.editingTime}
                 value={formatMinutes(metadata.editingTimeMinutes)}
-                flagged={isEditTimeFlagged}
+                flagged={hasAnyFlag(rowFlags.editingTime)}
                 yesLabel={tm.yes}
                 noLabel={tm.no}
               />
               <Row
                 label={tm.revisions}
                 value={metadata.revisions}
-                flagged={isRevFlagged}
+                flagged={hasAnyFlag(rowFlags.revisions)}
                 yesLabel={tm.yes}
                 noLabel={tm.no}
               />
@@ -189,6 +186,7 @@ export function MetadataPanel({ metadata, flags }: MetadataPanelProps) {
               <Row
                 label={tm.hasRevisionIds}
                 value={metadata.hasRevisionIds}
+                flagged={hasAnyFlag(rowFlags.revisionIds)}
                 title={tm.hasRevisionIdsTitle}
                 yesLabel={tm.yes}
                 noLabel={tm.no}

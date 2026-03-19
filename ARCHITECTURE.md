@@ -17,16 +17,17 @@ DocForensics is a client-side React application built with Vite and TypeScript. 
 6. `linguisticAnalyzer.ts` computes text metrics from the extracted content, including segment-level style change detection.
 7. `scoringEngine.ts` converts metadata, linguistic metrics, and software fingerprints into a 0-100 score and a list of flags.
 8. `src/App.tsx` keeps a local browser history of analyses in `localStorage` and restores it on reload.
-9. UI components render score breakdowns, detected evidence, and exportable results.
+9. UI components render score breakdowns, detected evidence, and a downloadable PDF report covering the whole local analysis history.
 
 ## Frontend structure
 
-- `src/App.tsx`: orchestration, batch upload expansion, result state, local history persistence, export flow
+- `src/App.tsx`: orchestration, batch upload expansion, result state, local history persistence, PDF report flow
 - `src/components/`: upload area and analysis panels
 - `src/analyzers/`: format-specific extraction and scoring logic
 - Paragraph boundaries are preserved where possible so style-shift analysis can work on DOCX and ODT inputs.
 - `src/i18n/`: localized copy
 - `src/types/analysis.ts`: shared types
+- `src/utils/reportPdf.ts`: client-side PDF report builder loaded on demand
 
 ## Build and delivery
 

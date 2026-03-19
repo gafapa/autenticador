@@ -243,6 +243,7 @@ function LanguageSwitcher() {
 }
 
 export default function App() {
+  const { locale } = useLocale()
   const t = useTranslation()
   const [history, setHistory] = useState<AnalysisResult[]>(() => loadAnalysisHistory())
   const [result, setResult] = useState<AnalysisResult | null>(() => {
@@ -250,6 +251,7 @@ export default function App() {
     return initialHistory[0] ?? null
   })
   const [loading, setLoading] = useState(false)
+  const [generatingReport, setGeneratingReport] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showText, setShowText] = useState(false)
 
@@ -307,17 +309,60 @@ export default function App() {
     [t]
   )
 
-  const handleExport = useCallback(() => {
-    if (!result) return
-    const data = JSON.stringify(result, null, 2)
-    const blob = new Blob([data], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `forensics-${result.fileName}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [result])
+  const handleGeneratePdfReport = useCallback(async () => {
+    if (history.length === 0) {
+      setError(t.report.emptyHistory)
+      return
+    }
+
+    setGeneratingReport(true)
+    setError(null)
+
+    try {
+      const { generateAnalysisPdfReport } = await import('./utils/reportPdf')
+      await generateAnalysisPdfReport({
+        analyses: history,
+        locale,
+        labels: {
+          title: t.report.title,
+          generatedAt: t.report.generatedAt,
+          sessionSummary: t.report.sessionSummary,
+          reviewedDocuments: t.report.reviewedDocuments,
+          averageScore: t.report.averageScore,
+          riskDistribution: t.report.riskDistribution,
+          fileName: t.report.fileName,
+          fileType: t.report.fileType,
+          analyzedAt: t.report.analyzedAt,
+          fileSize: t.report.fileSize,
+          score: t.report.score,
+          metadataSummary: t.report.metadataSummary,
+          author: t.metadata.author,
+          revisions: t.metadata.revisions,
+          editingTime: t.metadata.editingTime,
+          createdAt: t.metadata.createdAt,
+          modifiedAt: t.metadata.modifiedAt,
+          software: t.report.software,
+          linguisticSummary: t.report.linguisticSummary,
+          words: t.linguistic.words,
+          sentences: t.linguistic.sentences,
+          paragraphs: t.linguistic.paragraphs,
+          styleHotspots: t.linguistic.styleHotspots,
+          aiPhrases: t.linguistic.aiPhrases,
+          slopPhrases: t.linguistic.slopPhrases,
+          flags: t.report.flags,
+          noFlags: t.report.noFlags,
+          riskLevelLabel: t.report.riskLevelLabel,
+          riskLevelName: (level) => t.report.riskLevelNames[level],
+          sectionLabel: t.report.sectionLabel,
+          outputFileName: t.report.outputFileName,
+        },
+      })
+    } catch {
+      setError(t.report.generationError)
+    } finally {
+      setGeneratingReport(false)
+    }
+  }, [history, locale, t])
 
   const handleSelectHistory = useCallback((analysis: AnalysisResult) => {
     setResult(analysis)
@@ -349,12 +394,14 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <LanguageSwitcher />
-            {result && (
+            {history.length > 0 && (
               <button
-                onClick={handleExport}
-                className="text-sm px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
+                onClick={handleGeneratePdfReport}
+                disabled={generatingReport}
+                aria-busy={generatingReport}
+                className="min-h-11 text-sm px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {t.exportJson}
+                {generatingReport ? t.report.generatingPdf : t.report.generatePdf}
               </button>
             )}
           </div>
@@ -423,7 +470,10 @@ export default function App() {
 
         {/* Error */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
+          <div
+            role="alert"
+            className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm"
+          >
             {error}
           </div>
         )}

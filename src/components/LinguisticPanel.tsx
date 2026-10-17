@@ -20,6 +20,7 @@ function Metric({
   flagged?: boolean
   note?: string
 }) {
+  const t = useTranslation()
   return (
     <div
       className={`rounded-xl p-3 border ${
@@ -30,9 +31,9 @@ function Metric({
       <p className="text-xs text-gray-500 mb-1">{label}</p>
       <p className={`text-lg font-bold font-mono ${flagged ? 'text-red-700' : 'text-gray-800'}`}>
         {typeof value === 'number' ? value.toFixed(2) : value}
-        {unit && <span className="text-sm font-normal text-gray-400 ml-1">{unit}</span>}
+        {unit && <span className="text-sm font-normal text-gray-600 ml-1">{unit}</span>}
       </p>
-      {note && <p className="text-xs text-gray-400 mt-1 leading-tight">{note}</p>}
+      {note && note !== t.safety.metricNote && <p className="text-xs text-gray-600 mt-1 leading-tight">{note}</p>}
     </div>
   )
 }
@@ -48,28 +49,32 @@ export function LinguisticPanel({ metrics, flags }: LinguisticPanelProps) {
   return (
     <section className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
       <button
+        aria-expanded={open}
+        aria-controls="linguistic-panel"
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
       >
         <div className="flex items-center gap-2">
           <span className="text-xl">🔤</span>
           <span className="font-semibold text-gray-700">{tl.panelTitle}</span>
-          {visibleLingFlags.length > 0 && (
+          {visibleLingFlags.some(flag => flag.points > 0) && (
             <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
-              {visibleLingFlags.length} {visibleLingFlags.length !== 1 ? t.alerts : t.alert}
+              {visibleLingFlags.filter(flag => flag.points > 0).length} {visibleLingFlags.filter(flag => flag.points > 0).length !== 1 ? t.alerts : t.alert}
             </span>
           )}
         </div>
-        <span className="text-gray-400">{open ? '▲' : '▼'}</span>
+        <span className="text-gray-600">{open ? '▲' : '▼'}</span>
       </button>
 
       {open && (
-        <div className="px-4 pb-4">
+        <div id="linguistic-panel" className="px-4 pb-4">
           {insufficient && (
             <div className="mb-4 text-sm bg-blue-50 text-blue-700 rounded-lg px-3 py-2">
               ℹ {insufficient.detail}
             </div>
           )}
+
+          <p className="mb-4 text-sm text-gray-600">{t.safety.metricNote}</p>
 
           {/* Alerts */}
           {visibleLingFlags.length > 0 && (

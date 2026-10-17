@@ -1,32 +1,39 @@
 {
   "name": "doc-forensics",
   "version": "1.0.0",
-  "description": "Analizador de autenticidad de documentos — detecta IA y copia-pega",
+  "description": "Local document metadata, structure and writing-style analysis",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "tsc -p tsconfig.test.json && tsx --test tests/*.test.mjs",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "npm run build && node scripts/test-browser.mjs"
   },
   "dependencies": {
-    "fast-xml-parser": "^5.5.7",
+    "fast-xml-parser": "^5.11.2",
     "jspdf": "^4.2.1",
-    "jszip": "^3.10.1",
-    "mammoth": "^1.12.0",
-    "pdfjs-dist": "^5.5.207",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "jszip": "^3.10.2",
+    "pdfjs-dist": "^6.4.299",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.2.2",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.1",
-    "autoprefixer": "^10.4.27",
-    "postcss": "^8.5.8",
-    "tailwindcss": "^4.2.2",
+    "@playwright/test": "^1.64.1",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "autoprefixer": "^10.6.1",
+    "postcss": "^8.5.30",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "vite": "^8.0.1",
-    "vite-plugin-pwa": "^1.2.0"
+    "vite": "^8.3.4",
+    "vite-plugin-pwa": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=24.0.0"
   }
 }

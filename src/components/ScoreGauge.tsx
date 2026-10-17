@@ -6,6 +6,7 @@ interface ScoreGaugeProps {
 }
 
 const LEVEL_COLORS = {
+  insufficient: { ring: 'ring-slate-400', bg: 'bg-slate-50', text: 'text-slate-700', bar: 'bg-slate-500' },
   low: { ring: 'ring-green-500', bg: 'bg-green-50', text: 'text-green-700', bar: 'bg-green-500' },
   moderate: { ring: 'ring-yellow-500', bg: 'bg-yellow-50', text: 'text-yellow-700', bar: 'bg-yellow-500' },
   high: { ring: 'ring-orange-500', bg: 'bg-orange-50', text: 'text-orange-700', bar: 'bg-orange-500' },
@@ -54,14 +55,14 @@ export function ScoreGauge({ score }: ScoreGaugeProps) {
 
   return (
     <div className={`rounded-2xl p-6 ring-2 ${c.ring} ${c.bg}`}>
-      <div className="flex items-center gap-6">
+      <div className="flex flex-wrap items-center gap-6">
         {/* Score circle */}
         <div className="flex-shrink-0">
           <div
             className={`w-28 h-28 rounded-full ring-4 ${c.ring} flex flex-col items-center justify-center`}
           >
             <span className={`text-4xl font-black ${c.text}`}>
-              {score.total}
+              {score.level === 'insufficient' ? '—' : score.total}
             </span>
             <span className="text-xs text-gray-400 font-medium">/ 100</span>
           </div>
@@ -98,7 +99,7 @@ export function ScoreGauge({ score }: ScoreGaugeProps) {
       {/* Flag counts */}
       <div className="mt-4 pt-4 border-t border-gray-200 flex gap-4 text-sm">
         {(['high', 'medium', 'low'] as const).map((sev) => {
-          const count = score.flags.filter((f) => f.severity === sev).length
+          const count = score.flags.filter((f) => f.severity === sev && f.points > 0).length
           const sevColors = {
             high: 'text-red-600 bg-red-100',
             medium: 'text-yellow-700 bg-yellow-100',

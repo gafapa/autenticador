@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { DocumentMetadata, RiskFlag, FileType } from '../types/analysis'
+import { findAiSoftware } from '../utils/softwareFingerprint'
 import { useTranslation } from '../i18n'
 
 interface FingerprintPanelProps {
@@ -33,11 +34,7 @@ export function FingerprintPanel({ metadata, flags, fileType }: FingerprintPanel
     if (/google docs|google drive/.test(lower)) return { label: 'Google Docs', icon: '📑', type: 'word-processor' }
     if (/apple pages|pages/.test(lower)) return { label: 'Apple Pages', icon: '📃', type: 'word-processor' }
     if (/wps writer|wps/.test(lower)) return { label: 'WPS Writer', icon: '📝', type: 'word-processor' }
-    if (/chatgpt|openai|gpt/.test(lower)) return { label: 'ChatGPT / OpenAI', icon: '🤖', type: 'ai', badge: tf.aiBadge }
-    if (/claude|anthropic/.test(lower)) return { label: 'Claude / Anthropic', icon: '🤖', type: 'ai', badge: tf.aiBadge }
-    if (/gemini|bard/.test(lower)) return { label: 'Google Gemini', icon: '🤖', type: 'ai', badge: tf.aiBadge }
-    if (/quillbot|wordtune|writesonic|jasper|copy\.ai|rytr|llama|mistral/.test(lower))
-      return { label: s, icon: '🤖', type: 'ai', badge: tf.aiBadge }
+    if (findAiSoftware(s)) return { label: s, icon: '🤖', type: 'ai', badge: tf.aiBadge }
     if (/python.?docx|python_docx/.test(lower)) return { label: 'python-docx (Python)', icon: '🐍', type: 'library', badge: tf.libBadge }
     if (/reportlab/.test(lower)) return { label: 'ReportLab (Python)', icon: '🐍', type: 'library', badge: tf.libBadge }
     if (/fpdf/.test(lower)) return { label: 'FPDF (Python/PHP)', icon: '🐍', type: 'library', badge: tf.libBadge }
@@ -62,23 +59,25 @@ export function FingerprintPanel({ metadata, flags, fileType }: FingerprintPanel
   return (
     <section className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
       <button
+        aria-expanded={open}
+        aria-controls="fingerprint-panel"
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
       >
         <div className="flex items-center gap-2">
           <span className="text-xl">🔬</span>
           <span className="font-semibold text-gray-700">{tf.panelTitle}</span>
-          {fpFlags.length > 0 && (
+          {fpFlags.some(flag => flag.points > 0) && (
             <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
-              {fpFlags.length} {fpFlags.length !== 1 ? t.alerts : t.alert}
+              {fpFlags.filter(flag => flag.points > 0).length} {fpFlags.filter(flag => flag.points > 0).length !== 1 ? t.alerts : t.alert}
             </span>
           )}
         </div>
-        <span className="text-gray-400">{open ? '▲' : '▼'}</span>
+        <span className="text-gray-600">{open ? '▲' : '▼'}</span>
       </button>
 
       {open && (
-        <div className="px-4 pb-4 space-y-4">
+        <div id="fingerprint-panel" className="px-4 pb-4 space-y-4">
           {fpFlags.length > 0 && (
             <div className="space-y-2">
               {fpFlags.map((f) => (
@@ -108,7 +107,7 @@ export function FingerprintPanel({ metadata, flags, fileType }: FingerprintPanel
               <div className="space-y-2">
                 {softwareFields.map((s, i) => {
                   const info = classifySoftware(s)
-                  const isWarning = info.type === 'ai' || info.type === 'library'
+                  const isWarning = info.type === 'ai'
                   const isModerate = info.type === 'converter'
                   const borderBg = isWarning
                     ? 'border-red-200 bg-red-50'
@@ -128,7 +127,7 @@ export function FingerprintPanel({ metadata, flags, fileType }: FingerprintPanel
                       <span className="text-2xl">{info.icon}</span>
                       <div className="flex-1 min-w-0">
                         <p className={`font-medium text-sm ${textColor}`}>{info.label}</p>
-                        <p className="text-xs text-gray-400 font-mono truncate">{s}</p>
+                        <p className="text-xs text-gray-600 font-mono truncate">{s}</p>
                       </div>
                       {info.badge && (
                         <span className={`ml-auto shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ${badgeColor}`}>
@@ -144,58 +143,24 @@ export function FingerprintPanel({ metadata, flags, fileType }: FingerprintPanel
 
           {fileType === 'docx' && (
             <div>
-              <p className="text-sm font-medium text-gray-500 mb-2">{tf.docxStructure}</p>
-              <div className="grid grid-cols-2 gap-2">
-                <div className={`rounded-lg p-2.5 border text-sm ${metadata.hasRevisionIds ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-                  <span className="mr-1">{metadata.hasRevisionIds ? '✅' : '❌'}</span>
-                  <span className={metadata.hasRevisionIds ? 'text-green-700' : 'text-red-700'}>
-                    {tf.revisionIds}
-                  </span>
-                </div>
-                <div className={`rounded-lg p-2.5 border text-sm ${metadata.hasTrackChanges ? 'border-green-200 bg-green-50' : 'border-gray-100 bg-gray-50'}`}>
-                  <span className="mr-1">{metadata.hasTrackChanges ? '✅' : '➖'}</span>
-                  <span className={metadata.hasTrackChanges ? 'text-green-700' : 'text-gray-500'}>
-                    {tf.trackChanges}
-                  </span>
-                </div>
-                <div className={`rounded-lg p-2.5 border text-sm ${metadata.hasComments ? 'border-green-200 bg-green-50' : 'border-gray-100 bg-gray-50'}`}>
-                  <span className="mr-1">{metadata.hasComments ? '✅' : '➖'}</span>
-                  <span className={metadata.hasComments ? 'text-green-700' : 'text-gray-500'}>
-                    {tf.comments}
-                  </span>
-                </div>
-                <div className={`rounded-lg p-2.5 border text-sm ${metadata.revisions && metadata.revisions > 3 ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-                  <span className="mr-1">{metadata.revisions && metadata.revisions > 3 ? '✅' : '⚠'}</span>
-                  <span className={metadata.revisions && metadata.revisions > 3 ? 'text-green-700' : 'text-red-700'}>
-                    {metadata.revisions ?? 0} {metadata.revisions !== 1 ? tf.revisions : tf.revision}
-                  </span>
-                </div>
-                <div className={`rounded-lg p-2.5 border text-sm ${metadata.rsidCount && metadata.rsidCount > 2 ? 'border-green-200 bg-green-50' : 'border-yellow-200 bg-yellow-50'}`}>
-                  <span className="mr-1">{metadata.rsidCount && metadata.rsidCount > 2 ? '✅' : '⚠'}</span>
-                  <span className={metadata.rsidCount && metadata.rsidCount > 2 ? 'text-green-700' : 'text-yellow-800'}>
-                    {tf.rsidCount}: {metadata.rsidCount ?? 0}
-                  </span>
-                </div>
-                <div className={`rounded-lg p-2.5 border text-sm ${metadata.rsidCoverageRatio !== undefined && metadata.rsidCoverageRatio >= 0.65 ? 'border-green-200 bg-green-50' : 'border-yellow-200 bg-yellow-50'}`}>
-                  <span className="mr-1">{metadata.rsidCoverageRatio !== undefined && metadata.rsidCoverageRatio >= 0.65 ? '✅' : '⚠'}</span>
-                  <span className={metadata.rsidCoverageRatio !== undefined && metadata.rsidCoverageRatio >= 0.65 ? 'text-green-700' : 'text-yellow-800'}>
-                    {tf.rsidCoverage}: {formatRatio(metadata.rsidCoverageRatio)}
-                  </span>
-                </div>
-                <div className="rounded-lg p-2.5 border text-sm border-gray-100 bg-gray-50">
-                  <span className="mr-1">ℹ</span>
-                  <span className="text-gray-700">
-                    {tf.dominantRsid}: {formatRatio(metadata.dominantRsidRatio)}
-                  </span>
-                </div>
-                <div className="rounded-lg p-2.5 border text-sm border-gray-100 bg-gray-50 col-span-2">
-                  <span className="mr-1">ℹ</span>
-                  <span className="text-gray-700">
-                    {tf.paragraphStyles}: {metadata.paragraphStyleCount ?? 0}
-                    {metadata.paragraphStyles?.length ? ` (${metadata.paragraphStyles.join(', ')})` : ''}
-                  </span>
-                </div>
-              </div>
+              <p className="text-sm font-medium text-gray-600 mb-2">{tf.docxStructure}</p>
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                {[
+                  [tf.revisionIds, metadata.hasRevisionIds === undefined ? '—' : metadata.hasRevisionIds ? yesLabel : noLabel],
+                  [tf.trackChanges, metadata.hasTrackChanges === undefined ? '—' : metadata.hasTrackChanges ? yesLabel : noLabel],
+                  [tf.comments, metadata.hasComments === undefined ? '—' : metadata.hasComments ? yesLabel : noLabel],
+                  [tf.revisions, metadata.revisions ?? '—'],
+                  [tf.rsidCount, metadata.rsidCount ?? '—'],
+                  [tf.rsidCoverage, formatRatio(metadata.rsidCoverageRatio)],
+                  [tf.dominantRsid, formatRatio(metadata.dominantRsidRatio)],
+                  [tf.paragraphStyles, metadata.paragraphStyles?.join(', ') || '—'],
+                ].map(([label, value]) => (
+                  <div key={label} className="min-w-0 rounded-lg bg-gray-50 p-3">
+                    <dt className="text-gray-600">{label}</dt>
+                    <dd className="break-words text-gray-800">{value}</dd>
+                  </div>
+                ))}
+              </dl>
             </div>
           )}
 
@@ -203,9 +168,9 @@ export function FingerprintPanel({ metadata, flags, fileType }: FingerprintPanel
             <div>
               <p className="text-sm font-medium text-gray-500 mb-2">{tf.pdfStructure}</p>
               <div className="grid grid-cols-2 gap-2">
-                <div className={`rounded-lg p-2.5 border text-sm ${metadata.hasC2paManifest ? 'border-green-200 bg-green-50' : 'border-gray-100 bg-gray-50'}`}>
-                  <span className="mr-1">{metadata.hasC2paManifest ? '✅' : '➖'}</span>
-                  <span className={metadata.hasC2paManifest ? 'text-green-700' : 'text-gray-500'}>
+                <div className={`rounded-lg p-2.5 border text-sm ${metadata.hasC2paManifest ? 'border-gray-200 bg-gray-50' : 'border-gray-100 bg-gray-50'}`}>
+                  <span className="mr-1">{metadata.hasC2paManifest ? 'ℹ' : '➖'}</span>
+                  <span className={metadata.hasC2paManifest ? 'text-gray-700' : 'text-gray-500'}>
                     {tf.provenanceManifest}: {metadata.hasC2paManifest ? yesLabel : noLabel}
                   </span>
                 </div>
@@ -238,7 +203,7 @@ export function FingerprintPanel({ metadata, flags, fileType }: FingerprintPanel
           )}
 
           {softwareFields.length === 0 && fpFlags.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-2">
+            <p className="text-sm text-gray-600 text-center py-2">
               {tf.noFingerprints}
             </p>
           )}

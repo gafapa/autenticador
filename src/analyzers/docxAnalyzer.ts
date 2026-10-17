@@ -1,5 +1,8 @@
-import JSZip from 'jszip'
-import { XMLParser } from 'fast-xml-parser'
+import { tokenizeWords } from '../utils/text'
+import type JSZip from 'jszip'
+import { parseDocumentXml, extractParagraphs, parseNonNegativeNumber } from '../utils/documentXml'
+import { loadSafeZip, readZipXml } from '../utils/safeArchive'
+import { checkFileSize, checkMetadataSize, DocumentInputError, INPUT_LIMITS } from '../utils/inputLimits'
 import type { DocumentMetadata } from '../types/analysis'
 
 export interface DocxAnalysisResult {
@@ -13,35 +16,10 @@ interface DocxParagraphData {
   style?: string
 }
 
-const parser = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_',
-  textNodeName: '#text',
-  parseAttributeValue: false,
-})
-
 function parseIsoDate(s: unknown): Date | undefined {
   if (!s || typeof s !== 'string') return undefined
   const d = new Date(s)
   return isNaN(d.getTime()) ? undefined : d
-}
-
-function parseDurationMinutes(s: unknown): number | undefined {
-  if (s === undefined || s === null) return undefined
-  // TotalTime en app.xml es en minutos (entero)
-  const n = typeof s === 'string' ? parseInt(s, 10) : Number(s)
-  return isNaN(n) ? undefined : n
-}
-
-function decodeXmlEntities(text: string): string {
-  return text
-    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
 }
 
 function extractParagraphData(xmlStr: string): DocxParagraphData[] {
@@ -49,15 +27,8 @@ function extractParagraphData(xmlStr: string): DocxParagraphData[] {
 
   return paragraphMatches.map((match) => {
     const paragraphXml = match[0]
-      .replace(/<w:tab\b[^>]*\/>/g, ' ')
-      .replace(/<w:br\b[^>]*\/>/g, ' ')
-      .replace(/<w:cr\b[^>]*\/>/g, ' ')
 
-    const text = [...paragraphXml.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
-      .map((textMatch) => decodeXmlEntities(textMatch[1]))
-      .join('')
-      .replace(/\s+/g, ' ')
-      .trim()
+    const text = extractParagraphs(paragraphXml, 'docx').join(' ')
 
     const rsids = [
       ...new Set(
@@ -73,40 +44,41 @@ function extractParagraphData(xmlStr: string): DocxParagraphData[] {
   })
 }
 
-// Detecta si existen atributos rsid (revision save IDs) → indica edición real en Word
 function detectRsid(xmlStr: string): boolean {
   return /w:rsid/i.test(xmlStr)
 }
 
-// Detecta track changes
 function detectTrackChanges(xmlStr: string): boolean {
   return /<w:ins\b|<w:del\b/i.test(xmlStr)
 }
 
-// Detecta comentarios
 function detectComments(zip: JSZip): boolean {
   return zip.file('word/comments.xml') !== null
 }
 
-// Extrae fuentes tipográficas usadas en el documento (word/fontTable.xml)
-// Múltiples fuentes muy distintas = copia-pega de varias fuentes
 async function extractFontFamilies(zip: JSZip): Promise<string[]> {
   const fontFile = zip.file('word/fontTable.xml')
   if (!fontFile) return []
-  const xml = await fontFile.async('string')
-  // <w:font w:name="Arial"> → extrae el atributo w:name
+  const xml = (await readZipXml(zip, 'word/fontTable.xml'))!
   const matches = [...xml.matchAll(/w:name="([^"]+)"/g)]
   const fonts = matches
     .map((m) => m[1])
-    .filter((f) => !f.startsWith('+') && !f.startsWith('@')) // excluir fuentes de sistema
+    .filter((f) => !f.startsWith('+') && !f.startsWith('@'))
   return [...new Set(fonts)]
 }
 
 export async function analyzeDocx(file: File): Promise<DocxAnalysisResult> {
+  checkFileSize(file)
   const buffer = await file.arrayBuffer()
-  const zip = await JSZip.loadAsync(buffer)
+  const zip = await loadSafeZip(buffer)
+  const typesXml = (await readZipXml(zip, '[Content_Types].xml', true))!
+  const types = parseDocumentXml(typesXml)['Types']
+  const overrides = types?.Override ? (Array.isArray(types.Override) ? types.Override : [types.Override]) : []
+  if (!overrides.some((entry: Record<string, unknown>) => entry['@_PartName'] === '/word/document.xml' &&
+    entry['@_ContentType'] === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml')) {
+    throw new DocumentInputError('invalid')
+  }
 
-  // --- core.xml ---
   let author: string | undefined
   let lastModifiedBy: string | undefined
   let createdAt: Date | undefined
@@ -119,8 +91,8 @@ export async function analyzeDocx(file: File): Promise<DocxAnalysisResult> {
 
   const coreFile = zip.file('docProps/core.xml')
   if (coreFile) {
-    const coreXml = await coreFile.async('string')
-    const core = parser.parse(coreXml)
+    const coreXml = (await readZipXml(zip, 'docProps/core.xml'))!
+    const core = parseDocumentXml(coreXml)
     const props = core['cp:coreProperties'] ?? core['coreProperties'] ?? {}
     author = props['dc:creator']?.['#text'] ?? props['dc:creator'] ?? undefined
     lastModifiedBy =
@@ -139,10 +111,9 @@ export async function analyzeDocx(file: File): Promise<DocxAnalysisResult> {
     )
     const rev =
       props['cp:revision']?.['#text'] ?? props['cp:revision']
-    revisions = rev ? parseInt(String(rev), 10) : undefined
+    revisions = parseNonNegativeNumber(rev)
   }
 
-  // --- app.xml ---
   let editingTimeMinutes: number | undefined
   let wordCount: number | undefined
   let pageCount: number | undefined
@@ -152,20 +123,17 @@ export async function analyzeDocx(file: File): Promise<DocxAnalysisResult> {
 
   const appFile = zip.file('docProps/app.xml')
   if (appFile) {
-    const appXml = await appFile.async('string')
-    const app = parser.parse(appXml)
+    const appXml = (await readZipXml(zip, 'docProps/app.xml'))!
+    const app = parseDocumentXml(appXml)
     const props = app['Properties'] ?? {}
-    editingTimeMinutes = parseDurationMinutes(props['TotalTime'])
-    wordCount = props['Words'] ? parseInt(String(props['Words']), 10) : undefined
-    pageCount = props['Pages'] ? parseInt(String(props['Pages']), 10) : undefined
-    paragraphCount = props['Paragraphs']
-      ? parseInt(String(props['Paragraphs']), 10)
-      : undefined
-    lineCount = props['Lines'] ? parseInt(String(props['Lines']), 10) : undefined
+    editingTimeMinutes = parseNonNegativeNumber(props['TotalTime'])
+    wordCount = parseNonNegativeNumber(props['Words'])
+    pageCount = parseNonNegativeNumber(props['Pages'])
+    paragraphCount = parseNonNegativeNumber(props['Paragraphs'])
+    lineCount = parseNonNegativeNumber(props['Lines'])
     creator = props['Application'] ?? undefined
   }
 
-  // --- document.xml para texto y rsid ---
   let text = ''
   let hasRevisionIds = false
   let hasTrackChanges = false
@@ -176,14 +144,17 @@ export async function analyzeDocx(file: File): Promise<DocxAnalysisResult> {
   let paragraphStyles: string[] | undefined
 
   const docFile = zip.file('word/document.xml')
+  if (!docFile) throw new DocumentInputError('invalid')
   if (docFile) {
-    const docXml = await docFile.async('string')
+    const docXml = (await readZipXml(zip, 'word/document.xml', true))!
+    if (!parseDocumentXml(docXml)['w:document']) throw new DocumentInputError('invalid')
     const paragraphs = extractParagraphData(docXml)
     const textParagraphs = paragraphs
       .map((paragraph) => paragraph.text)
       .filter(Boolean)
 
     text = textParagraphs.join('\n\n')
+    if (text.length > INPUT_LIMITS.textCharacters) throw new DocumentInputError('limit')
     hasRevisionIds = detectRsid(docXml)
     hasTrackChanges = detectTrackChanges(docXml)
 
@@ -203,7 +174,7 @@ export async function analyzeDocx(file: File): Promise<DocxAnalysisResult> {
       : undefined
     dominantRsidRatio =
       paragraphsWithRsid.length && rsidCounts.size
-        ? Math.max(...rsidCounts.values()) / paragraphsWithRsid.length
+        ? Array.from(rsidCounts.values()).reduce((maximum, count) => Math.max(maximum, count), 0) / paragraphsWithRsid.length
         : undefined
 
     const styles = [
@@ -216,12 +187,12 @@ export async function analyzeDocx(file: File): Promise<DocxAnalysisResult> {
     paragraphStyleCount = styles.length || undefined
     paragraphStyles = styles.length ? styles.slice(0, 12) : undefined
 
-    if (paragraphCount === undefined && paragraphsWithText.length > 0) {
+    if (paragraphsWithText.length > 0) {
       paragraphCount = paragraphsWithText.length
     }
 
-    if (wordCount === undefined) {
-      const extractedWordCount = textParagraphs.join(' ').split(/\s+/).filter(Boolean).length
+    {
+      const extractedWordCount = tokenizeWords(text).length
       wordCount = extractedWordCount || undefined
     }
   }
@@ -260,6 +231,7 @@ export async function analyzeDocx(file: File): Promise<DocxAnalysisResult> {
     paragraphStyles,
   }
 
+  checkMetadataSize(metadata)
   return {
     metadata,
     text: text

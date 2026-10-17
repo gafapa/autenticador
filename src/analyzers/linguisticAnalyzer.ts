@@ -1,8 +1,7 @@
+import { tokenizeWords } from '../utils/text'
 import type { LinguisticMetrics, StyleChangeHotspot } from '../types/analysis'
 
-// Frases de transición típicas de IA (señal clásica)
 const AI_PHRASES = [
-  // Inglés
   'moreover', 'furthermore', 'in conclusion', 'it is worth noting',
   'in summary', 'to summarize', 'in addition', 'it is important to note',
   'it is essential to', 'needless to say', 'as previously mentioned',
@@ -11,7 +10,6 @@ const AI_PHRASES = [
   'in essence', 'undoubtedly', 'certainly', 'it is widely known',
   'as stated', 'due to the fact that', 'it is imperative', 'it goes without saying',
   'it is crucial', 'it is vital', 'it is noteworthy', 'one must consider',
-  // Español
   'en conclusión', 'en resumen', 'cabe destacar', 'es importante mencionar',
   'en este contexto', 'como se mencionó', 'en este sentido', 'sin duda',
   'por otro lado', 'en definitiva', 'en efecto', 'hay que señalar que',
@@ -21,10 +19,7 @@ const AI_PHRASES = [
   'en el contexto actual', 'a lo largo de', 'en primer lugar', 'finalmente',
 ]
 
-// Patrones "slop" — frases repetitivas 1000x más frecuentes en IA que en humanos
-// (basado en investigación arXiv:2510.15061 Anti-Slop Framework, 8000+ patrones)
 const SLOP_PHRASES = [
-  // Inglés — patrones de slop documentados
   'dive into', 'delve into', 'in the realm of', 'in today\'s world',
   'in today\'s fast-paced', 'the landscape of', 'leverage', 'utilize',
   'cutting-edge', 'game-changing', 'paradigm shift', 'seamlessly',
@@ -40,7 +35,6 @@ const SLOP_PHRASES = [
   'in terms of', 'when it comes to', 'it\'s no secret that',
   'have a profound impact', 'plays a crucial role', 'plays a vital role',
   'it is worth mentioning', 'it cannot be overstated',
-  // Español — equivalentes documentados
   'en el mundo actual', 'en la era digital', 'es un hecho innegable',
   'juega un papel crucial', 'juega un papel fundamental',
   'tiene un impacto profundo', 'es de vital importancia',
@@ -50,12 +44,9 @@ const SLOP_PHRASES = [
   'es imprescindible', 'desempeña un papel', 'profundizar en',
 ]
 
-// Pronombres de 1ª persona (los humanos los usan; la IA los evita)
 const FIRST_PERSON_PRONOUNS = [
-  // Español
   'yo', 'mi', 'mí', 'me', 'nosotros', 'nosotras', 'nuestro', 'nuestra',
   'nuestros', 'nuestras', 'nos',
-  // Inglés
   'i', 'my', 'mine', 'me', 'myself', 'we', 'our', 'ours', 'ourselves',
 ]
 
@@ -69,14 +60,14 @@ interface SegmentStats {
 
 function splitSentences(text: string): string[] {
   const raw = text.match(/[^.!?…\n]+[.!?…]?/g) ?? []
-  return raw.map((s) => s.trim()).filter((s) => s.split(/\s+/).length >= 3)
+  return raw.map((s) => s.trim()).filter((s) => tokenizeWords(s).length > 0)
 }
 
 function splitParagraphs(text: string): string[] {
   return text
     .split(/\n{1,}/)
     .map((p) => p.trim())
-    .filter((p) => p.split(/\s+/).length >= 5)
+    .filter((p) => tokenizeWords(p).length > 0)
 }
 
 function stdDev(arr: number[]): number {
@@ -115,9 +106,9 @@ function buildStyleSegments(paragraphs: string[]): string[] {
 }
 
 function shannonEntropy(text: string): number {
-  const freq: Record<string, number> = {}
-  for (const ch of text) freq[ch] = (freq[ch] ?? 0) + 1
-  const len = text.length
+  const freq: Record<string, number> = Object.create(null)
+  let len = 0
+  for (const ch of text) { freq[ch] = (freq[ch] ?? 0) + 1; len++ }
   if (len === 0) return 0
   return Object.values(freq).reduce((acc, count) => {
     const p = count / len
@@ -133,7 +124,7 @@ function typeTokenRatio(words: string[]): number {
 
 function hapaxPercentage(words: string[]): number {
   if (words.length === 0) return 0
-  const freq: Record<string, number> = {}
+  const freq: Record<string, number> = Object.create(null)
   for (const w of words) {
     const lw = w.toLowerCase()
     freq[lw] = (freq[lw] ?? 0) + 1
@@ -146,50 +137,44 @@ function countPhrases(text: string, phrases: string[]): { count: number; found: 
   const lower = text.toLowerCase()
   const found: string[] = []
   for (const phrase of phrases) {
-    if (lower.includes(phrase)) found.push(phrase)
+    const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    if (new RegExp(`(?:^|[^\\p{L}\\p{N}_])${escaped}(?=$|[^\\p{L}\\p{N}_])`, 'iu').test(lower)) found.push(phrase)
   }
   return { count: found.length, found }
 }
 
-// TTR de las primeras palabras de cada frase — la IA tiende a repetir inicios
 function firstWordDiversity(sentences: string[]): number {
   if (sentences.length < 3) return 1
   const firstWords = sentences
-    .map((s) => s.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^a-záéíóúüñ]/g, ''))
+    .map((s) => s.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ''))
     .filter(Boolean) as string[]
   if (firstWords.length === 0) return 1
   const unique = new Set(firstWords)
   return unique.size / firstWords.length
 }
 
-// % de pronombres 1ª persona sobre total de palabras
 function pronounRatio(words: string[]): number {
   if (words.length === 0) return 0
   const pronounSet = new Set(FIRST_PERSON_PRONOUNS)
-  const count = words.filter((w) => pronounSet.has(w.toLowerCase().replace(/[^a-záéíóúüñ]/g, ''))).length
+  const count = words.filter((w) => pronounSet.has(w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ''))).length
   return (count / words.length) * 100
 }
 
-// % de frases que terminan en signo de pregunta
 function questionRatio(sentences: string[]): number {
   if (sentences.length === 0) return 0
   const questions = sentences.filter((s) => s.trimEnd().endsWith('?')).length
   return (questions / sentences.length) * 100
 }
 
-// Detección de caracteres invisibles/zero-width (marcas de agua o manipulación)
 function countZeroWidthChars(text: string): number {
-  // U+200B zero-width space, U+200C zero-width non-joiner, U+200D zero-width joiner
-  // U+FEFF BOM/zero-width no-break space, U+00AD soft hyphen, U+2060 word joiner
-  // U+180E mongolian vowel separator (usado en algunos watermarks)
-  const matches = text.match(/[\u200B\u200C\u200D\uFEFF\u00AD\u2060\u180E\u2028\u2029]/g)
+  const matches = text.match(/[\u200B\u200C\u200D\uFEFF\u00AD\u2060\u180E]/g)
   return matches?.length ?? 0
 }
 
 function calculateSegmentStats(text: string): SegmentStats {
-  const words = text.trim().split(/\s+/).filter((word) => /\w/.test(word))
+  const words = tokenizeWords(text)
   const sentences = splitSentences(text)
-  const sentenceLengths = sentences.map((sentence) => sentence.split(/\s+/).filter(Boolean).length)
+  const sentenceLengths = sentences.map((sentence) => tokenizeWords(sentence).length)
   const avgSentenceLength =
     sentenceLengths.length > 0
       ? sentenceLengths.reduce((sum, length) => sum + length, 0) / sentenceLengths.length
@@ -254,13 +239,13 @@ function analyzeStyleChanges(paragraphs: string[]) {
 }
 
 export function analyzeLinguistics(text: string): LinguisticMetrics {
-  const words = text.trim().split(/\s+/).filter((w) => /\w/.test(w))
+  const words = tokenizeWords(text)
   const sentences = splitSentences(text)
   const paragraphs = splitParagraphs(text)
   const styleChanges = analyzeStyleChanges(paragraphs)
 
-  const sentenceLengths = sentences.map((s) => s.split(/\s+/).filter(Boolean).length)
-  const paragraphLengths = paragraphs.map((p) => p.split(/\s+/).filter(Boolean).length)
+  const sentenceLengths = sentences.map((s) => tokenizeWords(s).length)
+  const paragraphLengths = paragraphs.map((p) => tokenizeWords(p).length)
 
   const avgSentenceLength =
     sentenceLengths.length > 0
@@ -271,7 +256,7 @@ export function analyzeLinguistics(text: string): LinguisticMetrics {
       ? paragraphLengths.reduce((a, b) => a + b, 0) / paragraphLengths.length
       : 0
 
-  const wordLengths = words.map((w) => w.replace(/[^a-záéíóúüñA-ZÁÉÍÓÚÜÑ]/g, '').length)
+  const wordLengths = words.map((w) => w.replace(/[^\p{L}]/gu, '').length)
   const avgWordLength =
     wordLengths.length > 0 ? wordLengths.reduce((a, b) => a + b, 0) / wordLengths.length : 0
   const longWordPercentage =

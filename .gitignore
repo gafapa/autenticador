@@ -1,7 +1,14 @@
 node_modules/
 dist/
+.tmp-tests/
 .DS_Store
 *.local
 .env
 .env.*
 .claude/
+.codex/
+.metagallego/
+.agents/
+
+test-results/
+playwright-report/

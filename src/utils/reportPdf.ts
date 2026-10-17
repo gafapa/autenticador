@@ -1,5 +1,9 @@
+import normalFontUrl from '../assets/fonts/NotoSans-Regular.ttf?url'
+import boldFontUrl from '../assets/fonts/NotoSans-Bold.ttf?url'
 import type { AnalysisResult, RiskFlag } from '../types/analysis'
 import { TRANSLATIONS, type Locale } from '../i18n'
+import { localizeRiskFlag } from '../i18n/reviewCopy'
+import { getScoreBarFillWidth } from './scoreBar'
 
 type RgbColor = [number, number, number]
 
@@ -18,6 +22,7 @@ const LEVEL_STYLES: Record<
   AnalysisResult['score']['level'],
   { fill: RgbColor; soft: RgbColor; text: RgbColor; bar: RgbColor }
 > = {
+  insufficient: { fill: [100, 116, 139], soft: [241, 245, 249], text: [51, 65, 85], bar: [100, 116, 139] },
   low: {
     fill: [22, 163, 74],
     soft: [220, 252, 231],
@@ -121,9 +126,24 @@ export async function generateAnalysisPdfReport({
   analyses,
   locale,
 }: ReportOptions): Promise<void> {
+  analyses = analyses.map(analysis => ({ ...analysis, score: { ...analysis.score, flags: analysis.score.flags.map(flag => localizeRiskFlag(flag, locale)) } }))
   const { jsPDF } = await import('jspdf')
   const t = TRANSLATIONS[locale] as (typeof TRANSLATIONS)['es']
   const doc = new jsPDF({ compress: true, unit: 'mm', format: 'a4' })
+  const fonts = await Promise.all([normalFontUrl, boldFontUrl].map(async url => {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error('Report font unavailable')
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    let binary = ''
+    for (let offset = 0; offset < bytes.length; offset += 8192) {
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192))
+    }
+    return btoa(binary)
+  }))
+  doc.addFileToVFS('NotoSans-Regular.ttf', fonts[0])
+  doc.addFont('NotoSans-Regular.ttf', 'NotoSans', 'normal')
+  doc.addFileToVFS('NotoSans-Bold.ttf', fonts[1])
+  doc.addFont('NotoSans-Bold.ttf', 'NotoSans', 'bold')
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
   const contentWidth = pageWidth - PAGE_MARGIN * 2
@@ -163,7 +183,7 @@ export async function generateAnalysisPdfReport({
     doc.roundedRect(x, top, width, height, 3, 3, 'F')
     doc.setFillColor(...accent)
     doc.roundedRect(x, top, width, 4, 3, 3, 'F')
-    doc.setFont('helvetica', 'bold')
+    doc.setFont('NotoSans', 'bold')
     doc.setFontSize(8)
     doc.setTextColor(71, 85, 105)
     doc.text(label, x + 4, top + 10)
@@ -182,71 +202,76 @@ export async function generateAnalysisPdfReport({
     const labelWidth = 42
     const valueWidth = bodyWidth - labelWidth
 
-    const rowHeights = rows.map((row) => {
-      const labelLines = splitText(doc, row.label, labelWidth)
-      const valueLines = splitText(doc, row.value, valueWidth)
-      return Math.max(labelLines.length, valueLines.length) * LINE_HEIGHT + ROW_TOP_PADDING + ROW_BOTTOM_PADDING
-    })
-
-    const height = 12 + rowHeights.reduce((sum, rowHeight) => sum + rowHeight, 0) + 4
-    ensureSpace(height + cardGap)
-
-    const top = y
-    doc.setFillColor(...soft)
-    doc.roundedRect(PAGE_MARGIN, top, contentWidth, height, 3, 3, 'F')
-    doc.setFillColor(...accent)
-    doc.roundedRect(PAGE_MARGIN, top, contentWidth, 9, 3, 3, 'F')
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(11)
-    doc.setTextColor(255, 255, 255)
-    doc.text(title, PAGE_MARGIN + 4, top + 6)
-
-    let currentY = top + 14
-    rows.forEach((row, index) => {
-      const labelLines = splitText(doc, row.label, labelWidth)
-      const valueLines = splitText(doc, row.value, valueWidth)
-      const blockHeight = rowHeights[index]
-      const textTop = currentY + ROW_TOP_PADDING
-
-      doc.setFont('helvetica', 'bold')
+    const prepared = rows.flatMap(row => {
+      doc.setFont('NotoSans', 'bold')
       doc.setFontSize(8)
-      doc.setTextColor(71, 85, 105)
-      drawLines(doc, labelLines, PAGE_MARGIN + 4, textTop, LINE_HEIGHT)
-
-      doc.setFont('helvetica', 'normal')
+      const labels = splitText(doc, row.label, labelWidth)
+      doc.setFont('NotoSans', 'normal')
       doc.setFontSize(8.5)
-      doc.setTextColor(15, 23, 42)
-      drawLines(doc, valueLines, PAGE_MARGIN + 4 + labelWidth + 4, textTop, LINE_HEIGHT)
-
-      currentY += blockHeight
-      if (index < rows.length - 1) {
-        doc.setDrawColor(226, 232, 240)
-        doc.line(PAGE_MARGIN + 4, currentY - 1, pageWidth - PAGE_MARGIN - 4, currentY - 1)
+      const values = splitText(doc, row.value, valueWidth)
+      const parts = []
+      for (let offset = 0; offset < Math.max(labels.length, values.length); offset += 32) {
+        const labelLines = labels.slice(offset, offset + 32)
+        const valueLines = values.slice(offset, offset + 32)
+        parts.push({ labelLines, valueLines, height: Math.max(labelLines.length, valueLines.length) * LINE_HEIGHT + ROW_TOP_PADDING + ROW_BOTTOM_PADDING })
       }
+      return parts
     })
-
-    y += height + cardGap
+    let index = 0
+    while (index < prepared.length) {
+      ensureSpace(18 + prepared[index].height + cardGap)
+      const selected = []
+      let height = 18
+      while (index < prepared.length && y + height + prepared[index].height <= pageHeight - PAGE_MARGIN - FOOTER_HEIGHT) {
+        const row = prepared[index++]
+        selected.push(row)
+        height += row.height
+      }
+      const top = y
+      doc.setFillColor(...soft)
+      doc.roundedRect(PAGE_MARGIN, top, contentWidth, height, 3, 3, 'F')
+      doc.setFillColor(...accent)
+      doc.roundedRect(PAGE_MARGIN, top, contentWidth, 9, 3, 3, 'F')
+      doc.setFont('NotoSans', 'bold')
+      doc.setFontSize(11)
+      doc.setTextColor(255, 255, 255)
+      doc.text(title, PAGE_MARGIN + 4, top + 6)
+      let currentY = top + 14
+      for (const row of selected) {
+        const textTop = currentY + ROW_TOP_PADDING
+        doc.setFont('NotoSans', 'bold')
+        doc.setFontSize(8)
+        doc.setTextColor(71, 85, 105)
+        drawLines(doc, row.labelLines, PAGE_MARGIN + 4, textTop, LINE_HEIGHT)
+        doc.setFont('NotoSans', 'normal')
+        doc.setFontSize(8.5)
+        doc.setTextColor(15, 23, 42)
+        drawLines(doc, row.valueLines, PAGE_MARGIN + 4 + labelWidth + 4, textTop, LINE_HEIGHT)
+        currentY += row.height
+      }
+      y += height + cardGap
+    }
   }
 
   const drawScoreBreakdownCard = (analysis: AnalysisResult) => {
     const style = LEVEL_STYLES[analysis.score.level]
-    const top = y
-    const height = 42
+    const height = 46
     ensureSpace(height + cardGap)
+    const top = y
 
     doc.setFillColor(248, 250, 252)
     doc.roundedRect(PAGE_MARGIN, top, contentWidth, height, 3, 3, 'F')
     doc.setFillColor(...style.fill)
     doc.roundedRect(PAGE_MARGIN, top, contentWidth, 7, 3, 3, 'F')
-    doc.setFont('helvetica', 'bold')
+    doc.setFont('NotoSans', 'bold')
     doc.setFontSize(11)
     doc.setTextColor(255, 255, 255)
     doc.text(t.report.scoreBreakdown, PAGE_MARGIN + 4, top + 5)
 
     doc.setFontSize(18)
     doc.setTextColor(...style.text)
-    doc.text(`${analysis.score.total}/100`, PAGE_MARGIN + 4, top + 18)
-    doc.setFont('helvetica', 'normal')
+    doc.text(analysis.score.level === 'insufficient' ? '—' : `${analysis.score.total}/100`, PAGE_MARGIN + 4, top + 18)
+    doc.setFont('NotoSans', 'normal')
     doc.setFontSize(9)
     doc.setTextColor(71, 85, 105)
     doc.text(t.score.levels[analysis.score.level], PAGE_MARGIN + 4, top + 24)
@@ -262,19 +287,21 @@ export async function generateAnalysisPdfReport({
 
     rows.forEach((row, index) => {
       const currentY = barYStart + index * 4
-      const railX = barX + 36
-      const railWidth = barWidth - 36
-      const fillWidth = Math.max((row.value / row.max) * railWidth, 2)
+      const railX = barX + 64
+      const railWidth = barWidth - 64
+      const fillWidth = getScoreBarFillWidth(row.value, row.max, railWidth)
 
-      doc.setFont('helvetica', 'bold')
+      doc.setFont('NotoSans', 'bold')
       doc.setFontSize(7.5)
       doc.setTextColor(51, 65, 85)
       doc.text(`${row.label} ${row.value}/${row.max}`, barX, currentY - 0.6)
 
       doc.setFillColor(226, 232, 240)
       doc.roundedRect(railX, currentY - 2.2, railWidth, 2.4, 1.2, 1.2, 'F')
-      doc.setFillColor(...style.bar)
-      doc.roundedRect(railX, currentY - 2.2, fillWidth, 2.4, 1.2, 1.2, 'F')
+      if (fillWidth > 0) {
+        doc.setFillColor(...style.bar)
+        doc.roundedRect(railX, currentY - 2.2, fillWidth, 2.4, 1.2, 1.2, 'F')
+      }
     })
 
     y += height + cardGap
@@ -323,61 +350,65 @@ export async function generateAnalysisPdfReport({
     }
 
     ensureSpace(14)
-    doc.setFont('helvetica', 'bold')
+    doc.setFont('NotoSans', 'bold')
     doc.setFontSize(11)
     doc.setTextColor(30, 41, 59)
     doc.text(t.report.flags, PAGE_MARGIN, y + 4)
     y += 8
 
     analysis.score.flags.forEach((flag) => {
+      doc.setFont('NotoSans', 'normal')
+      doc.setFontSize(8.5)
       const severityStyle = SEVERITY_STYLES[flag.severity]
       const text = `${flag.label}: ${flag.detail}`
-      const lines = splitText(doc, text, contentWidth - 10)
+      const lines = splitText(doc, text, contentWidth - 37)
       const height = lines.length * LINE_HEIGHT + ROW_TOP_PADDING + ROW_BOTTOM_PADDING
       ensureSpace(height + 2)
 
       doc.setFillColor(...severityStyle.fill)
       doc.roundedRect(PAGE_MARGIN, y, contentWidth, height, 2, 2, 'F')
-      doc.setFont('helvetica', 'bold')
+      doc.setFont('NotoSans', 'bold')
       doc.setFontSize(8)
       doc.setTextColor(...severityStyle.text)
-      doc.text(flag.severity.toUpperCase(), PAGE_MARGIN + 3, y + 5)
+      doc.text(({ high: t.score.sevHigh, medium: t.score.sevMedium, low: t.score.sevLow })[flag.severity], PAGE_MARGIN + 3, y + 5)
 
-      doc.setFont('helvetica', 'normal')
+      doc.setFont('NotoSans', 'normal')
       doc.setFontSize(8.5)
-      drawLines(doc, lines, PAGE_MARGIN + 16, y + ROW_TOP_PADDING + 1, LINE_HEIGHT)
+      drawLines(doc, lines, PAGE_MARGIN + 32, y + ROW_TOP_PADDING + 1, LINE_HEIGHT)
       y += height + 2
     })
   }
 
   const drawSummaryPage = () => {
-    const averageScore =
-      analyses.reduce((sum, analysis) => sum + analysis.score.total, 0) / Math.max(analyses.length, 1)
-    const flaggedDocuments = analyses.filter((analysis) => analysis.score.flags.length > 0).length
+    const assessed = analyses.filter(analysis => analysis.score.level !== 'insufficient')
+    const averageScore = assessed.length ? assessed.reduce((sum, analysis) => sum + analysis.score.total, 0) / assessed.length : undefined
+    const flaggedDocuments = analyses.filter((analysis) => analysis.score.flags.some(flag => flag.points > 0)).length
     const totalAlerts = analyses.reduce((sum, analysis) => sum + analysis.score.flags.length, 0)
     const riskCounts = analyses.reduce<Record<AnalysisResult['score']['level'], number>>(
       (acc, analysis) => {
         acc[analysis.score.level] += 1
         return acc
       },
-      { low: 0, moderate: 0, high: 0, critical: 0 }
+      { low: 0, moderate: 0, high: 0, critical: 0, insufficient: 0 }
     )
     const highestRiskDocuments = analyses
+      .filter(analysis => analysis.score.level !== 'insufficient')
       .slice()
       .sort((left, right) => right.score.total - left.score.total)
       .slice(0, 5)
 
     doc.setFillColor(15, 23, 42)
     doc.roundedRect(PAGE_MARGIN, y, contentWidth, 34, 4, 4, 'F')
-    doc.setFont('helvetica', 'bold')
+    doc.setFont('NotoSans', 'bold')
     doc.setFontSize(20)
     doc.setTextColor(255, 255, 255)
     doc.text(t.report.title, PAGE_MARGIN + 5, y + 12)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont('NotoSans', 'normal')
     doc.setFontSize(10)
     doc.text(t.report.subtitle, PAGE_MARGIN + 5, y + 19)
     doc.text(`${t.report.generatedAt}: ${formatDate(timestamp, locale)}`, PAGE_MARGIN + 5, y + 26)
     y += 40
+    drawLabeledRowsCard(t.note, [{ label: t.report.score, value: t.disclaimer }], [51, 65, 85], [248, 250, 252])
 
     const summaryStyle = LEVEL_STYLES.high
     drawMetricCard(
@@ -394,7 +425,7 @@ export async function generateAnalysisPdfReport({
       y,
       columnWidth,
       t.report.averageScore,
-      `${averageScore.toFixed(1)}/100`,
+      averageScore === undefined ? '—' : `${averageScore.toFixed(1)}/100`,
       [37, 99, 235],
       [219, 234, 254]
     )
@@ -422,7 +453,7 @@ export async function generateAnalysisPdfReport({
 
     drawLabeledRowsCard(
       t.report.riskDistribution,
-      (['low', 'moderate', 'high', 'critical'] as const).map((level) => ({
+      (['low', 'moderate', 'high', 'critical', 'insufficient'] as const).map((level) => ({
         label: t.report.riskLevelNames[level],
         value: String(riskCounts[level]),
       })),
@@ -435,7 +466,7 @@ export async function generateAnalysisPdfReport({
       highestRiskDocuments.length > 0
         ? highestRiskDocuments.map((analysis) => ({
             label: truncateText(analysis.fileName, 60),
-            value: `${analysis.score.total}/100 | ${t.report.riskLevelNames[analysis.score.level]}`,
+            value: `${analysis.score.level === 'insufficient' ? '—' : analysis.score.total + '/100'} | ${t.report.riskLevelNames[analysis.score.level]}`,
           }))
         : [{ label: t.report.highestRiskDocuments, value: t.report.noData }],
       [30, 41, 59],
@@ -450,13 +481,14 @@ export async function generateAnalysisPdfReport({
 
     doc.setFillColor(...style.fill)
     doc.roundedRect(PAGE_MARGIN, y, contentWidth, 28, 4, 4, 'F')
-    doc.setFont('helvetica', 'bold')
+    doc.setFont('NotoSans', 'bold')
     doc.setFontSize(14)
     doc.setTextColor(255, 255, 255)
     doc.text(t.report.sectionLabel(index + 1, analyses.length), PAGE_MARGIN + 5, y + 9)
     doc.setFontSize(12)
-    doc.text(truncateText(analysis.fileName, 80), PAGE_MARGIN + 5, y + 17)
-    doc.setFont('helvetica', 'normal')
+    const titleLines = splitText(doc, analysis.fileName, contentWidth - 48)
+    doc.text(titleLines[0] + (titleLines.length > 1 ? '…' : ''), PAGE_MARGIN + 5, y + 17)
+    doc.setFont('NotoSans', 'normal')
     doc.setFontSize(9)
     doc.text(
       `${analysis.fileType.toUpperCase()} | ${formatSize(analysis.fileSize)} | ${formatDate(analysis.analyzedAt, locale)}`,
@@ -466,11 +498,11 @@ export async function generateAnalysisPdfReport({
 
     doc.setFillColor(255, 255, 255)
     doc.roundedRect(pageWidth - PAGE_MARGIN - 34, y + 5, 28, 12, 3, 3, 'F')
-    doc.setFont('helvetica', 'bold')
+    doc.setFont('NotoSans', 'bold')
     doc.setFontSize(15)
     doc.setTextColor(...style.text)
-    doc.text(String(analysis.score.total), pageWidth - PAGE_MARGIN - 25, y + 13, { align: 'center' })
-    doc.setFont('helvetica', 'normal')
+    doc.text(analysis.score.level === 'insufficient' ? '—' : String(analysis.score.total), pageWidth - PAGE_MARGIN - 25, y + 13, { align: 'center' })
+    doc.setFont('NotoSans', 'normal')
     doc.setFontSize(7)
     doc.text('/100', pageWidth - PAGE_MARGIN - 25, y + 17, { align: 'center' })
 
@@ -485,7 +517,7 @@ export async function generateAnalysisPdfReport({
         { label: t.report.fileName, value: analysis.fileName },
         { label: t.report.fileType, value: analysis.fileType.toUpperCase() },
         { label: t.report.fileSize, value: formatSize(analysis.fileSize) },
-        { label: t.report.score, value: `${analysis.score.total}/100` },
+        { label: t.report.score, value: analysis.score.level === 'insufficient' ? '—' : `${analysis.score.total}/100` },
       ],
       [37, 99, 235],
       [239, 246, 255]
@@ -599,7 +631,7 @@ export async function generateAnalysisPdfReport({
     doc.setPage(pageIndex)
     doc.setDrawColor(226, 232, 240)
     doc.line(PAGE_MARGIN, pageHeight - FOOTER_HEIGHT, pageWidth - PAGE_MARGIN, pageHeight - FOOTER_HEIGHT)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont('NotoSans', 'normal')
     doc.setFontSize(8)
     doc.setTextColor(100, 116, 139)
     doc.text(t.report.title, PAGE_MARGIN, pageHeight - 4)

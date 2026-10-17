@@ -72,7 +72,7 @@ export function MetadataPanel({ metadata, flags }: MetadataPanelProps) {
   const tm = t.metadata
   const [open, setOpen] = useState(true)
   const metaFlags = flags.filter((f) => f.category === 'metadata')
-  const flagIds = new Set(flags.map((f) => f.id))
+  const flagIds = new Set(flags.filter(f => f.points > 0).map((f) => f.id))
   const hasAnyFlag = (ids: string[]) => ids.some((id) => flagIds.has(id))
 
   const rowFlags = {
@@ -91,23 +91,25 @@ export function MetadataPanel({ metadata, flags }: MetadataPanelProps) {
   return (
     <section className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
       <button
+        aria-expanded={open}
+        aria-controls="metadata-panel"
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
       >
         <div className="flex items-center gap-2">
           <span className="text-xl">📋</span>
           <span className="font-semibold text-gray-700">{tm.panelTitle}</span>
-          {metaFlags.length > 0 && (
+          {metaFlags.some(flag => flag.points > 0) && (
             <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
-              {metaFlags.length} {metaFlags.length !== 1 ? t.alerts : t.alert}
+              {metaFlags.filter(flag => flag.points > 0).length} {metaFlags.filter(flag => flag.points > 0).length !== 1 ? t.alerts : t.alert}
             </span>
           )}
         </div>
-        <span className="text-gray-400">{open ? '▲' : '▼'}</span>
+        <span className="text-gray-600">{open ? '▲' : '▼'}</span>
       </button>
 
       {open && (
-        <div className="px-4 pb-4">
+        <div id="metadata-panel" className="px-4 pb-4">
           {metaFlags.length > 0 && (
             <div className="mb-4 space-y-2">
               {metaFlags.map((f) => (

@@ -1,23 +1,23 @@
 export type FileType = 'pdf' | 'docx' | 'odt' | 'unknown'
 
 export interface DocumentMetadata {
-  // Autoría
+  // Authorship fields
   author?: string
   lastModifiedBy?: string
-  creator?: string         // software de creación
-  producer?: string        // para PDF
-  generator?: string       // para ODT
+  creator?: string         // creation software
+  producer?: string        // PDF producer
+  generator?: string       // ODT generator
 
-  // Fechas
+  // Dates
   createdAt?: Date
   modifiedAt?: Date
   lastPrintedAt?: Date
 
-  // Historial de edición
-  revisions?: number       // número de revisiones guardadas
-  editingTimeMinutes?: number  // minutos totales editando
+  // Recorded editing history
+  revisions?: number       // recorded revision count
+  editingTimeMinutes?: number  // recorded editing minutes
 
-  // Contenido
+  // Content statistics
   wordCount?: number
   pageCount?: number
   paragraphCount?: number
@@ -30,9 +30,9 @@ export interface DocumentMetadata {
   description?: string
   hasTrackChanges?: boolean
   hasComments?: boolean
-  hasRevisionIds?: boolean  // rsid en DOCX = presencia de historial Word
-  fontFamilyCount?: number  // nº de fuentes distintas (mezcla = copia-pega)
-  fontFamilies?: string[]   // lista de fuentes detectadas
+  hasRevisionIds?: boolean  // presence of Word revision markers
+  fontFamilyCount?: number  // declared font family count
+  fontFamilies?: string[]   // declared font families
   rsidCount?: number
   rsidCoverageRatio?: number
   dominantRsidRatio?: number
@@ -59,40 +59,40 @@ export interface LinguisticMetrics {
 
   // Burstiness
   avgSentenceLength: number
-  stdSentenceLength: number    // varianza alta = más humano
+  stdSentenceLength: number    // sentence length standard deviation
 
-  // Riqueza léxica
-  typeTokenRatio: number       // 0-1; humanos ~0.45-0.70
-  hapaxPercentage: number      // % palabras únicas en el texto
+  // Lexical diversity
+  typeTokenRatio: number       // unique token ratio, 0-1
+  hapaxPercentage: number      // percentage of types occurring once
 
-  // Frases típicas de IA
+  // Phrase dictionary matches
   aiPhraseCount: number
   aiPhrasesFound: string[]
 
-  // Entropía
-  shannonEntropy: number       // bits por carácter; humanos ~4.0-4.8
+  // Entropy
+  shannonEntropy: number       // bits per Unicode code point
 
-  // Uniformidad de párrafos
+  // Paragraph length distribution
   avgParagraphLength: number
   stdParagraphLength: number
 
-  // Métricas extra
+  // Additional descriptive metrics
   avgWordLength: number
-  longWordPercentage: number   // % palabras >8 letras
+  longWordPercentage: number   // percentage of words longer than eight letters
 
-  // Estilo formal / impersonal (señal IA)
-  pronounRatio: number         // % pronombres 1ª persona (yo/I/nosotros) — IA evita
-  questionRatio: number        // % frases que terminan en ? — IA raramente pregunta
-  firstWordDiversity: number   // TTR de primeras palabras de frases — IA repite inicios
+  // Descriptive style metrics
+  pronounRatio: number         // first-person pronoun percentage
+  questionRatio: number        // percentage of sentences ending in a question mark
+  firstWordDiversity: number   // sentence-initial word diversity
 
-  // Patrones "slop" (arXiv:2510.15061 — 1000x más frecuentes en IA)
+  // Stock expression dictionary matches
   slopPhraseCount: number
   slopPhrasesFound: string[]
 
-  // Caracteres invisibles (posibles marcas de agua o manipulación)
+  // Invisible formatting character count
   zeroWidthCharCount: number
 
-  // Cambio de estilo por segmentos
+  // Local style changes between segments
   segmentCount: number
   styleChangeAverage: number
   styleChangeMax: number
@@ -114,7 +114,7 @@ export interface ScoreBreakdown {
   linguisticScore: number   // 0-40
   fingerprintScore: number  // 0-20
   total: number             // 0-100
-  level: 'low' | 'moderate' | 'high' | 'critical'
+  level: 'low' | 'moderate' | 'high' | 'critical' | 'insufficient'
   levelLabel: string
   flags: RiskFlag[]
 }

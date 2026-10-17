@@ -1,14 +1,16 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { REVIEW_COPY } from './reviewCopy'
+import { readLocalValue, writeLocalValue } from '../utils/browserStorage'
 
 export type Locale = 'en' | 'fr' | 'de' | 'es' | 'gl' | 'ca' | 'eu'
 
 export const LOCALE_OPTIONS: Array<{ code: Locale; label: string }> = [
-  { code: 'es', label: 'Espanol' },
+  { code: 'es', label: 'Español' },
   { code: 'gl', label: 'Galego' },
-  { code: 'ca', label: 'Catala' },
+  { code: 'ca', label: 'Català' },
   { code: 'eu', label: 'Euskara' },
   { code: 'en', label: 'English' },
-  { code: 'fr', label: 'Francais' },
+  { code: 'fr', label: 'Français' },
   { code: 'de', label: 'Deutsch' },
 ]
 
@@ -1417,17 +1419,32 @@ const eu: typeof en = {
   },
 }
 
-export const TRANSLATIONS = {
-  en,
-  fr,
-  de,
-  es,
-  gl,
-  ca,
-  eu,
-} as const satisfies Record<Locale, typeof en>
+function hardenTranslations(base: typeof en, locale: Locale) {
+  const safety = REVIEW_COPY[locale]
+  const levels = { low: safety.levels[0], moderate: safety.levels[1], high: safety.levels[2], critical: safety.levels[3], insufficient: safety.levels[4] }
+  const linguistic = { ...base.linguistic }
+  for (const key of ['burstiNote', 'ttrNote', 'entropyNote', 'stdParagraphNote', 'aiPhrasesNote', 'slopNote', 'pronounNote', 'questionsNote', 'firstWordNote', 'invisibleNote'] as const) {
+    linguistic[key] = safety.metricNote
+  }
+  linguistic.aiPhrases = safety.flags[11]
+  linguistic.slopPhrases = safety.flags[12]
+  linguistic.aiPhrasesFound = safety.flags[11]
+  linguistic.slopFound = safety.flags[12]
+  const subtitle = { en: 'Local document review', es: 'Revisión local de documentos', gl: 'Revisión local de documentos', fr: 'Analyse locale de documents', de: 'Lokale Dokumentprüfung', ca: 'Revisió local de documents', eu: 'Dokumentuen tokiko analisia' }
+  return { ...base, appSubtitle: subtitle[locale], safety, disclaimer: safety.notice, linguistic,
+    score: { ...base.score, levels, risk: base.alerts },
+    report: { ...base.report, riskLevelNames: levels, averageScore: base.report.score, highestRiskDocuments: base.report.reviewedDocuments, riskDistribution: base.report.scoreBreakdown },
+    metadata: { ...base.metadata, hasRevisionIdsTitle: safety.metricNote },
+    fingerprint: { ...base.fingerprint, aiBadge: safety.aiBadge, provenanceManifest: ({ en: 'C2PA marker (unverified)', es: 'Marcador C2PA (sin verificar)', gl: 'Marcador C2PA (sen verificar)', fr: 'Marqueur C2PA (non vérifié)', de: 'C2PA-Marker (ungeprüft)', ca: 'Marcador C2PA (sense verificar)', eu: 'C2PA marka (egiaztatu gabe)' })[locale] },
+  }
+}
 
-type Translations = typeof en
+export const TRANSLATIONS = {
+  en: hardenTranslations(en, 'en'), fr: hardenTranslations(fr, 'fr'), de: hardenTranslations(de, 'de'),
+  es: hardenTranslations(es, 'es'), gl: hardenTranslations(gl, 'gl'), ca: hardenTranslations(ca, 'ca'), eu: hardenTranslations(eu, 'eu'),
+}
+
+type Translations = ReturnType<typeof hardenTranslations>
 
 const LanguageContext = createContext<{
   locale: Locale
@@ -1436,13 +1453,15 @@ const LanguageContext = createContext<{
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(() => {
-    const saved = localStorage.getItem('docforensics-locale')
+    const saved = readLocalValue('docforensics-locale')
     return saved && isLocale(saved) ? saved : 'es'
   })
 
+  useEffect(() => { document.documentElement.lang = locale }, [locale])
+
   const setLocale = (nextLocale: Locale) => {
     setLocaleState(nextLocale)
-    localStorage.setItem('docforensics-locale', nextLocale)
+    writeLocalValue('docforensics-locale', nextLocale)
   }
 
   return (

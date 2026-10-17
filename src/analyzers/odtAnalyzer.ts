@@ -1,18 +1,14 @@
-import JSZip from 'jszip'
-import { XMLParser } from 'fast-xml-parser'
+import { tokenizeWords } from '../utils/text'
+import { parseDocumentXml, parseNonNegativeNumber } from '../utils/documentXml'
+import { loadSafeZip, readZipXml, readZipEntry } from '../utils/safeArchive'
+import { checkFileSize, checkMetadataSize, DocumentInputError } from '../utils/inputLimits'
 import type { DocumentMetadata } from '../types/analysis'
+import { extractOdtText } from '../utils/odtText'
 
 export interface OdtAnalysisResult {
   metadata: DocumentMetadata
   text: string
 }
-
-const parser = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_',
-  textNodeName: '#text',
-  parseAttributeValue: false,
-})
 
 function parseIsoDate(s: unknown): Date | undefined {
   if (!s || typeof s !== 'string') return undefined
@@ -20,31 +16,24 @@ function parseIsoDate(s: unknown): Date | undefined {
   return isNaN(d.getTime()) ? undefined : d
 }
 
-// ISO 8601 duration: PT1H30M → 90 minutos
 function parseDurationToMinutes(s: unknown): number | undefined {
   if (!s || typeof s !== 'string') return undefined
-  const m = s.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/)
+  const m = s.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/)
   if (!m) return undefined
   const h = parseInt(m[1] ?? '0', 10)
   const min = parseInt(m[2] ?? '0', 10)
-  return h * 60 + min
-}
-
-// Extrae texto plano de XML ODT (text:p y text:span)
-function extractOdtText(xmlStr: string): string {
-  const matches = [
-    ...xmlStr.matchAll(/<text:p[^>]*>([\s\S]*?)<\/text:p>/g),
-    ...xmlStr.matchAll(/<text:h[^>]*>([\s\S]*?)<\/text:h>/g),
-  ]
-  return matches
-    .map((m) => m[1].replace(/<[^>]+>/g, ' ').trim())
-    .filter(Boolean)
-    .join('\n')
+  const minutes = h * 60 + min + Number(m[3] ?? 0) / 60
+  return Number.isFinite(minutes) ? minutes : undefined
 }
 
 export async function analyzeOdt(file: File): Promise<OdtAnalysisResult> {
+  checkFileSize(file)
   const buffer = await file.arrayBuffer()
-  const zip = await JSZip.loadAsync(buffer)
+  const zip = await loadSafeZip(buffer)
+  const mimeEntry = zip.file('mimetype')
+  if (!mimeEntry || new TextDecoder().decode(await readZipEntry(mimeEntry, 256)) !== 'application/vnd.oasis.opendocument.text') {
+    throw new DocumentInputError('invalid')
+  }
 
   let author: string | undefined
   let createdAt: Date | undefined
@@ -59,11 +48,10 @@ export async function analyzeOdt(file: File): Promise<OdtAnalysisResult> {
   let keywords: string | undefined
   let description: string | undefined
 
-  // --- meta.xml ---
   const metaFile = zip.file('meta.xml')
   if (metaFile) {
-    const metaXml = await metaFile.async('string')
-    const meta = parser.parse(metaXml)
+    const metaXml = (await readZipXml(zip, 'meta.xml'))!
+    const meta = parseDocumentXml(metaXml)
     const office = meta['office:document-meta'] ?? {}
     const m = office['office:meta'] ?? {}
 
@@ -80,7 +68,7 @@ export async function analyzeOdt(file: File): Promise<OdtAnalysisResult> {
     )
     const cycles =
       m['meta:editing-cycles']?.['#text'] ?? m['meta:editing-cycles']
-    revisions = cycles ? parseInt(String(cycles), 10) : undefined
+    revisions = parseNonNegativeNumber(cycles)
 
     title = m['dc:title']?.['#text'] ?? m['dc:title'] ?? undefined
     subject = m['dc:subject']?.['#text'] ?? m['dc:subject'] ?? undefined
@@ -88,24 +76,24 @@ export async function analyzeOdt(file: File): Promise<OdtAnalysisResult> {
       m['dc:description']?.['#text'] ?? m['dc:description'] ?? undefined
     keywords = m['meta:keyword']?.['#text'] ?? m['meta:keyword'] ?? undefined
 
-    // Estadísticas de documento
     const stats = m['meta:document-statistic']
     if (stats) {
       const attr = stats['@_meta:word-count'] ?? stats['@_word-count']
-      if (attr) wordCount = parseInt(String(attr), 10)
+      wordCount = parseNonNegativeNumber(attr)
       const pg = stats['@_meta:page-count'] ?? stats['@_page-count']
-      if (pg) pageCount = parseInt(String(pg), 10)
+      pageCount = parseNonNegativeNumber(pg)
     }
   }
 
-  // --- content.xml para texto ---
   let text = ''
   const contentFile = zip.file('content.xml')
+  if (!contentFile) throw new DocumentInputError('invalid')
   if (contentFile) {
-    const contentXml = await contentFile.async('string')
+    const contentXml = (await readZipXml(zip, 'content.xml', true))!
+    if (!parseDocumentXml(contentXml)['office:document-content']) throw new DocumentInputError('invalid')
     text = extractOdtText(contentXml)
-    if (!wordCount) {
-      wordCount = text.trim().split(/\s+/).filter(Boolean).length
+    {
+      wordCount = tokenizeWords(text).length
     }
   }
 
@@ -124,6 +112,7 @@ export async function analyzeOdt(file: File): Promise<OdtAnalysisResult> {
     description: typeof description === 'string' ? description : undefined,
   }
 
+  checkMetadataSize(metadata)
   return {
     metadata,
     text: text

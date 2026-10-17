@@ -2,46 +2,36 @@
 
 ## Overview
 
-DocForensics is a client-side React application built with Vite and TypeScript. It accepts document uploads, extracts metadata and text in the browser, computes linguistic and fingerprint signals, and renders a forensic score without sending files to a backend.
+DocForensics is a React 19 / TypeScript application bundled by Vite 8. It reviews PDF, DOCX, and ODT documents entirely in the browser. Interface locale and document language are separate concerns. The UI supports seven locales; lexical phrase dictionaries currently cover English and Spanish.
 
-## Processing flow
+## Input pipeline
 
-1. `src/components/FileDropzone.tsx` accepts batch uploads for `.pdf`, `.docx`, `.odt`, and `.zip`.
-2. `src/App.tsx` expands ZIP archives locally with `jszip`, filters supported entries, then detects each file type and dynamically imports the matching analyzer.
-3. Analyzer modules in `src/analyzers/` extract raw text and metadata:
-   - `pdfAnalyzer.ts`
-   - `docxAnalyzer.ts`
-   - `odtAnalyzer.ts`
-4. `pdfAnalyzer.ts` also inspects local PDF structure for C2PA markers, embedded files, and suspicious text-layer geometry.
-5. `docxAnalyzer.ts` also extracts OOXML paragraph-level RSID and paragraph-style signals.
-6. `linguisticAnalyzer.ts` computes text metrics from the extracted content, including segment-level style change detection.
-7. `scoringEngine.ts` converts metadata, linguistic metrics, and software fingerprints into a 0-100 score and a list of flags.
-8. `src/App.tsx` keeps a local browser history of analyses in `localStorage` and restores it on reload.
-9. UI components render score breakdowns, detected evidence, and a downloadable color-coded PDF report covering the whole local analysis history.
+1. `FileDropzone.tsx` exposes a native keyboard-accessible upload button and drag/drop, with visible processing limits. Loading blocks repeated submissions.
+2. `fileIntake.ts` yields supported documents sequentially, including ZIP entries, and bounds the cumulative file count and expanded batch bytes. Completed documents remain available when a later input fails.
+3. `safeArchive.ts` checks the ZIP central directory before loading JSZip, rejects unsafe paths, duplicate names, encryption and unsupported archive structures, and bounds actual streamed extraction. `inputLimits.ts` centralizes the resource limits.
+4. DOCX and ODT analyzers require their format declarations, main document XML and expected root element. `documentXml.ts` validates XML, rejects DTD/entity declarations and excessive nesting, preserves ordered text, handles structural whitespace, and excludes deleted Word text. Metadata is treated as untrusted input, with finite numeric values and bounded strings and arrays.
+5. `pdfAnalyzer.ts` dynamically loads PDF.js 6, uses a bundled dedicated worker, extracts text without rendering pages or executing document actions, bounds page count, extracted characters and a 30-second worker deadline, and releases the document and worker. XMP values use PDF.js metadata accessors. C2PA detection is an unverified byte-marker observation.
+6. `linguisticAnalyzer.ts` computes descriptive statistics and local style distances. Phrase and software matches use Unicode word boundaries.
+7. `scoringEngine.ts` creates a conservative review index and evidence observations. Ordinary export software and missing private metadata add no suspicion points. Fewer than 80 words produces the `insufficient` level. The index is not an AI probability or an authorship decision.
 
-## Frontend structure
+## State, persistence and presentation
 
-- `src/App.tsx`: orchestration, batch upload expansion, result state, local history persistence, PDF report flow
-- `src/components/`: upload area and analysis panels
-- `src/analyzers/`: format-specific extraction and scoring logic
-- Paragraph boundaries are preserved where possible so style-shift analysis can work on DOCX and ODT inputs.
-- `src/i18n/`: localized copy and locale definitions for English, French, German, Spanish, Galician, Catalan, and Basque
-- The header language switcher uses a single accessible `<select>` so all supported locales fit on desktop and mobile.
-- `src/types/analysis.ts`: shared types
-- `src/utils/reportPdf.ts`: client-side PDF report builder loaded on demand, with a summary cover page and per-document detail pages
+- `App.tsx` coordinates sequential processing, a synchronous submission guard, in-memory results, persistence warnings and report generation.
+- `analysisHistory.ts` validates each stored entry and date, restores valid entries independently, and recomputes historical scores under current rules. It never changes storage while loading. Saving is all-or-nothing; it never prunes session results to fit storage quota.
+- `browserStorage.ts` contains browser storage access failures. Locale selection remains usable if storage is unavailable.
+- History stores only the first 5,000 extracted characters and does not save the source document. Capacity limits are 100 analyses and 2,000,000 serialized characters.
+- `reviewCopy.ts` supplies localized review labels, limitations and actionable error messages. UI panels and exported reports use the same flag localization.
+- `reportPdf.ts` loads jsPDF on demand and creates summary and document-detail pages. Insufficient-text documents are explicitly marked and excluded from the mean index.
+- Expandable panels expose their state to assistive technology; focus states and reduced-motion preferences are supported.
 
-## Build and delivery
+## Delivery and verification
 
-- Vite 8 handles bundling and dynamic imports.
-- Tailwind CSS 4 runs through `@tailwindcss/postcss`.
-- `pdfjs-dist` runs through a dedicated worker imported with `?worker`.
-- `vite-plugin-pwa` generates the web manifest and service worker.
-- The app is configured for GitHub Pages deployment under `/autenticador/`.
-- Production artifacts are emitted to `dist/`.
+- `npm test` runs TypeScript source regressions through `tsx` and Node's test runner.
+- `npm run build` type-checks the application and creates `dist/`.
+- `npm run test:e2e` builds the app and runs Playwright against the production preview in desktop and mobile Chromium configurations, using fictitious local documents.
+- `vite-plugin-pwa` 2 generates the manifest, precache and service worker for `/`.
+- The production build injects a CSP restricting scripts, workers, and connections to the hosting origin. Inline styles are allowed for React styles and generated visualizations; inline scripts and external frames are blocked.
 
-## Constraints
+## Boundaries
 
-- Legacy binary `.doc` files are intentionally unsupported.
-- ZIP processing is fully local and only extracts supported file types from the archive.
-- Heuristics are investigative signals, not proof.
-- The repository currently has no first-party automated tests.
+There is no server-side document processing. Resource limits reduce accidental and hostile expansion but are not a complete sandbox against every adversarial PDF or XML parser workload. Browser history is not encrypted or isolated from other applications on the same origin. The review heuristics have no validated authorship accuracy guarantee. See `SECURITY.md` for the threat model.

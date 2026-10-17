@@ -2,22 +2,39 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const base = '/'
+
 export default defineConfig({
+  base,
   plugins: [
     react(),
+    {
+      name: 'production-content-security-policy',
+      apply: 'build',
+      transformIndexHtml() {
+        return [{
+          tag: 'meta',
+          attrs: {
+            'http-equiv': 'Content-Security-Policy',
+            content: "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob:; worker-src 'self' blob:; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'",
+          },
+          injectTo: 'head-prepend',
+        }]
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['pwa-icon.svg', 'pwa-192.png', 'pwa-512.png'],
+      includeAssets: ['NotoSans-OFL.txt', 'pwa-icon.svg', 'pwa-192.png', 'pwa-512.png'],
       manifest: {
         name: 'DocForensics',
         short_name: 'DocForensics',
-        description: 'Detector de autenticidad de documentos · Document authenticity detector',
+        description: 'Local document metadata, structure and writing-style review',
         theme_color: '#1e40af',
         background_color: '#f8fafc',
         display: 'standalone',
         orientation: 'portrait-primary',
-        scope: '/',
-        start_url: '/',
+        scope: base,
+        start_url: base,
         icons: [
           {
             src: 'pwa-192.png',
@@ -38,23 +55,12 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
-        globIgnores: ['**/pdf.worker*'],
-        runtimeCaching: [
-          {
-            urlPattern: /\/assets\/pdf\.worker.*\.mjs$/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'pdf-worker',
-              expiration: { maxAgeSeconds: 60 * 60 * 24 * 30 },
-            },
-          },
-        ],
+        globPatterns: ['**/*.{js,css,html,svg,png,woff2,ttf}'],
       },
     }),
   ],
   optimizeDeps: {
-    include: ['pdfjs-dist', 'jszip', 'fast-xml-parser', 'mammoth'],
+    include: ['pdfjs-dist', 'jszip', 'fast-xml-parser'],
   },
   worker: {
     format: 'es',

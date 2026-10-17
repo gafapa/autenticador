@@ -30,6 +30,7 @@ export function FileDropzone({ onFiles, loading }: FileDropzoneProps) {
 
   const handleFiles = useCallback(
     (files: File[]) => {
+      if (loading) return
       const invalidFile = files.find((file) => !isAccepted(file))
       if (invalidFile) {
         setError(t.unsupportedFormat(invalidFile.name))
@@ -43,7 +44,7 @@ export function FileDropzone({ onFiles, loading }: FileDropzoneProps) {
       setError(null)
       onFiles(files)
     },
-    [onFiles, t]
+    [onFiles, t, loading]
   )
 
   const onDrop = useCallback(
@@ -67,12 +68,17 @@ export function FileDropzone({ onFiles, loading }: FileDropzoneProps) {
 
   return (
     <div className="w-full max-w-2xl mx-auto">
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+      <button
+        type="button"
+        disabled={loading}
+        aria-busy={loading}
+        aria-describedby="upload-limits"
+        onDragOver={(e) => { e.preventDefault(); if (!loading) setDragging(true) }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
         onClick={() => !loading && inputRef.current?.click()}
         className={`
+          w-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-700
           border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer
           transition-all duration-200 select-none
           ${dragging
@@ -82,17 +88,17 @@ export function FileDropzone({ onFiles, loading }: FileDropzoneProps) {
           ${loading ? 'opacity-60 cursor-not-allowed' : ''}
         `}
       >
-        <div className="flex flex-col items-center gap-4">
-          <div className="text-6xl">
+        <span className="flex flex-col items-center gap-4">
+          <span aria-hidden="true" className="text-6xl">
             {loading ? '⏳' : dragging ? '📂' : '📄'}
-          </div>
-          <div>
-            <p className="text-xl font-semibold text-gray-700">
+          </span>
+          <span>
+            <span className="block text-xl font-semibold text-gray-700">
               {loading ? t.dropzone.analyzing : t.dropzone.title}
-            </p>
-            <p className="text-sm text-gray-400 mt-1">{t.dropzone.or}</p>
-          </div>
-          <div className="flex gap-2 flex-wrap justify-center">
+            </span>
+            <span className="block text-sm text-gray-600 mt-1">{t.dropzone.or}</span>
+          </span>
+          <span className="flex gap-2 flex-wrap justify-center">
             {['PDF', 'DOCX', 'ODT', 'ZIP'].map((ext) => (
               <span
                 key={ext}
@@ -101,8 +107,9 @@ export function FileDropzone({ onFiles, loading }: FileDropzoneProps) {
                 .{ext.toLowerCase()}
               </span>
             ))}
-          </div>
-        </div>
+          </span>
+        </span>
+      </button>
         <input
           ref={inputRef}
           type="file"
@@ -112,9 +119,9 @@ export function FileDropzone({ onFiles, loading }: FileDropzoneProps) {
           onChange={onInputChange}
           disabled={loading}
         />
-      </div>
+      <p id="upload-limits" className="mt-3 text-sm text-gray-600">{t.safety.limits}</p>
       {error && (
-        <p className="mt-3 text-sm text-red-600 text-center">{error}</p>
+        <p role="alert" className="mt-3 text-sm text-red-600 text-center">{error}</p>
       )}
     </div>
   )

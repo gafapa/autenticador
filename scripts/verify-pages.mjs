@@ -12,6 +12,7 @@ const site = `https://${domain}/`
 const endpoint = `https://api.github.com/repos/${repository}/pages`
 const headers = {
   Accept: 'application/vnd.github+json',
+  'Content-Type': 'application/json',
   Authorization: `Bearer ${token}`,
   'X-GitHub-Api-Version': '2022-11-28',
 }

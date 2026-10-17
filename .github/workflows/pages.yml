@@ -75,7 +75,5 @@ jobs:
       - name: Deploy Pages artifact
         id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
-      - name: Verify TLS and enforce HTTPS
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      - name: Verify live HTTPS and redirect
         run: node scripts/verify-pages.mjs

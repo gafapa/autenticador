@@ -30,7 +30,7 @@ DocForensics is a React 19 / TypeScript application bundled by Vite 8. It review
 - `npm run build` type-checks the application and creates `dist/`.
 - `npm run test:e2e` builds the app and runs Playwright against the production preview in desktop and mobile Chromium configurations, using fictitious local documents.
 - `vite-plugin-pwa` 2 generates the manifest, precache and service worker for `/`.
-- `scripts/verify-pages.mjs` validates the published HTTPS endpoint and enables HTTPS enforcement after Pages provisions its certificate.
+- `scripts/verify-pages.mjs` validates the published HTTPS endpoint and the redirect configured by an administrator in Pages settings. It uses no administrative workflow credential.
 - The production build injects a CSP restricting scripts, workers, and connections to the hosting origin. Inline styles are allowed for React styles and generated visualizations; inline scripts and external frames are blocked.
 
 ## Boundaries

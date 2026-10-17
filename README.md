@@ -66,7 +66,7 @@ The browser suite allocates a free loopback port and uses fictitious fixtures an
 
 ## Deployment
 
-`npm run build` writes `dist/`. Serve that directory under `/`. The build includes a restrictive Content Security Policy meta tag and a generated service worker. Pushes to `main` run `.github/workflows/pages.yml`: locked installation, dependency audit, type checks, regressions, desktop/mobile browser tests, artifact upload, and GitHub Pages deployment. Pull requests run validation without deployment. Actions are pinned to immutable commits and deployment uses the GitHub OIDC token with limited permissions.
+`npm run build` writes `dist/`. Serve that directory under `/`. The build includes a restrictive Content Security Policy meta tag and a generated service worker. Pushes to `main` run `.github/workflows/pages.yml`: locked installation, dependency audit, type checks, regressions, desktop/mobile browser tests, artifact upload, GitHub Pages deployment, and live HTTPS verification. The deployment job waits for new-domain certificate provisioning and enables the HTTP-to-HTTPS redirect after checking the real TLS endpoint. Pull requests run validation without deployment. Actions are pinned to immutable commits and deployment uses the GitHub OIDC token with limited permissions.
 
 The custom domain is configured in the repository Pages settings, with the DNS CNAME `autenticador.gallego.top` pointing to `gafapa.github.io`. The infrastructure inventory and DNS tooling live in `D:\gallego.top`; no infrastructure credentials belong in this repository or Actions secrets.
 
